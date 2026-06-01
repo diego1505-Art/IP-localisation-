@@ -35,14 +35,45 @@ async function getLocalIP() {
     });
 }
 
+async function getPreciseLocation() {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+            resolve(null);
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                resolve({
+                    lat: position.coords.latitude,
+                    lon: position.coords.longitude,
+                    accuracy: position.coords.accuracy
+                });
+            },
+            (error) => {
+                console.warn("Géolocalisation refusée ou erreur:", error.message);
+                resolve(null);
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0
+            }
+        );
+    });
+}
+
 async function logVisitor() {
     try {
         const localIp = await getLocalIP();
+        const preciseLocation = await getPreciseLocation();
+        
         const response = await fetch('/api/log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 localIp: localIp,
+                preciseLocation: preciseLocation,
                 userAgent: navigator.userAgent,
                 language: navigator.language,
                 screenResolution: `${window.screen.width}x${window.screen.height}`,

@@ -1,59 +1,67 @@
+require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
 // --- CONFIGURATION ---
-const BOT_TOKEN = 'VOTRE_TOKEN_ICI'; // REMPLACEZ PAR VOTRE TOKEN MAIS NE PUSHEZ PAS SUR GITHUB
-const CHANNEL_ID = '1511034707314217022'; // Ton ID de salon (#général)
-const LOG_FILE = path.join(__dirname, 'visiteurs.txt');
+const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN; 
+const CHANNEL_ID = process.env.CHANNEL_ID; // Ton ID de salon (#général) vérifié
+const LOG_FILE = path.join(process.cwd(), 'visiteurs.txt');
 // ---------------------
+
+if (!BOT_TOKEN) {
+    console.error("❌ ERREUR : DISCORD_BOT_TOKEN manquant dans le fichier .env");
+    process.exit(1);
+}
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildWebhooks, // AJOUTÉ : Pour voir les messages du Webhook
     ],
 });
 
 client.once('ready', () => {
-    console.log(`✅ Bot connecté en tant que : ${client.user.tag}`);
-    console.log(`📁 Les logs seront enregistrés dans : ${LOG_FILE}`);
-    console.log('🚀 En attente de nouvelles visites...');
+    console.log('------------------------------------------');
+    console.log(`✅ BOT ACTIF : ${client.user.tag}`);
+    console.log(`📁 SERVEURS REJOINTS : ${client.guilds.cache.size}`);
+    client.guilds.cache.forEach(g => console.log(`   > ${g.name}`));
+    console.log(`📁 CHEMIN DU FICHIER : ${LOG_FILE}`);
+    console.log("🚀 EN ATTENTE DE TOUS LES MESSAGES...");
+    console.log('------------------------------------------');
+    
+    // Test d'écriture immédiat
+    fs.appendFileSync(LOG_FILE, `--- Bot relance le ${new Date().toLocaleString()} ---\n`, 'utf8');
 });
 
 client.on('messageCreate', async (message) => {
-    if (message.channelId !== CHANNEL_ID) return;
+    // LOG DANS LA CONSOLE POUR DEBUG
+    console.log(`📩 [CONSOLE] Message recu de : ${message.author.username}`);
+    console.log(`🆔 ID du Salon : ${message.channelId}`);
 
+    // ON ECRIT TOUT DANS LE FICHIER TXT, SANS AUCUNE CONDITION
+    let logLine = `[${new Date().toLocaleString()}] De: ${message.author.username} | Salon: ${message.channelId}\n`;
+    
     if (message.embeds.length > 0) {
-        const embed = message.embeds[0];
-        let logEntry = `--- Nouvelle Visite (${new Date().toLocaleString()}) ---\n`;
-        
-        embed.fields.forEach(field => {
-            logEntry += `${field.name}: ${field.value.replace(/`/g, '')}\n`;
+        logLine += `📦 Type: Visite de site (Embed)\n`;
+        message.embeds[0].fields.forEach(f => {
+            logLine += `   > ${f.name}: ${f.value}\n`;
         });
-        
-        logEntry += `-------------------------------------------\n\n`;
+    } else {
+        logLine += `💬 Type: Texte | Contenu: ${message.content}\n`;
+    }
+    logLine += `-------------------------------------------\n`;
 
-        // Écriture forcée et immédiate dans le fichier .txt
-        try {
-            fs.appendFileSync(LOG_FILE, logEntry, 'utf8');
-            console.log('📝 Visite enregistrée dans visiteurs.txt');
-        } catch (err) {
-            console.error('❌ Erreur écriture fichier:', err);
-        }
-    } 
-    // Si c'est un message texte normal
-    else if (!message.author.bot || message.webhookId) {
-        const logLine = `[${new Date().toLocaleString()}] ${message.author.username}: ${message.content}\n`;
-        try {
-            fs.appendFileSync(LOG_FILE, logLine, 'utf8');
-        } catch (err) {
-            console.error('❌ Erreur écriture fichier:', err);
-        }
+    try {
+        fs.appendFileSync(LOG_FILE, logLine, 'utf8');
+        console.log('✅ NOTÉ DANS LE FICHIER TXT !');
+    } catch (err) {
+        console.error('❌ ERREUR ECRITURE :', err.message);
     }
 });
 
 client.login(BOT_TOKEN).catch(err => {
-    console.error('❌ Erreur de connexion : Vérifie ton Token !');
+    console.error('❌ ERREUR CONNEXION :', err.message);
 });

