@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/api/export-logs", "destination": "/api/export-logs" },
+    { "source": "/api/(.*)", "destination": "/api/$1" }
+  ]
+}
