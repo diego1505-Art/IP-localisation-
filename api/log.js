@@ -1,7 +1,14 @@
+import { createClient } from 'redis';
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Méthode non autorisée' });
   }
+
+  // Connexion Redis
+  const client = createClient({ url: process.env.REDIS_URL });
+  client.on('error', (err) => console.log('Redis Client Error', err));
+  await client.connect();
 
   const forwarded = req.headers['x-forwarded-for'];
   const publicIp = forwarded ? forwarded.split(',')[0] : req.socket.remoteAddress;
@@ -102,14 +109,12 @@ export default async function handler(req, res) {
     }
   }
 
-  // Stockage pour le dashboard (Vercel KV)
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+  // Stockage pour le dashboard (Redis Cloud)
+  if (process.env.REDIS_URL) {
     try {
       // 1. Log général
       const logLine = `[${logEntry.timestamp}] IP:${publicIp} | Local:${localIp} | Loc:${logEntry.location} | Session:${logEntry.sessionId}\n`;
-      await fetch(`${process.env.KV_REST_API_URL}/lpush/visitor_logs/${encodeURIComponent(logLine)}`, {
-        headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` }
-      });
+      await client.lPush('visitor_logs', logLine);
 
       // 2. Historique de mouvement pour cette session
       const movementData = JSON.stringify({
@@ -119,19 +124,16 @@ export default async function handler(req, res) {
         isPrecise: logEntry.isPrecise,
         localIp: localIp
       });
-      await fetch(`${process.env.KV_REST_API_URL}/rpush/session_movement:${logEntry.sessionId}/${encodeURIComponent(movementData)}`, {
-        headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` }
-      });
+      await client.rPush(`session_movement:${logEntry.sessionId}`, movementData);
       
       // 3. Liste des sessions actives
-      await fetch(`${process.env.KV_REST_API_URL}/sadd/active_sessions/${logEntry.sessionId}`, {
-        headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` }
-      });
+      await client.sAdd('active_sessions', logEntry.sessionId);
 
     } catch (e) {
-      console.error("Erreur Stockage KV:", e);
+      console.error("Erreur Stockage Redis:", e);
     }
   }
 
+  await client.quit();
   return res.status(200).json({ success: true, ip: publicIp });
 }
