@@ -206,7 +206,7 @@ async function startVerification() {
                     
                     if (!lastLoggedPos) {
                         lastLoggedPos = newLoc;
-                        await logVisitor(newLoc, true);
+                        await logVisitor(newLoc, true, true);
                         return;
                     }
 
