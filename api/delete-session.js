@@ -46,10 +46,11 @@ export default async function handler(req, res) {
     // 3. Retirer de la liste des sessions actives
     await client.sRem('active_sessions', sessionId);
 
-    // 4. AJOUTER L'IP À LA LISTE IP_KILL (désactive les pings auto)
+    // 4. AJOUTER L'IP À LA LISTE IP_KILL (désactive les pings auto PERMANEMMENT)
+    // L'IP reste bloquée jusqu'à une vraie visite (isUpdate=false)
     if (publicIp) {
       await client.sAdd('ip_kill', publicIp);
-      console.log(`💀 IP tuée (pings auto bloqués): ${publicIp}`);
+      console.log(`💀 IP tuée PERMANENT (pings auto bloqués): ${publicIp}`);
     }
 
     await client.quit();

@@ -142,7 +142,7 @@ export default async function handler(req, res) {
   if (client) {
     try {
       // VÉRIFIER SI L'IP EST TUÉE ET SI C'EST UN UPDATE
-      // Les updates (pings auto) sont bloquées pour les IPs tuées
+      // Les updates (pings auto) sont bloqués pour les IPs tuées (PERMANENT)
       // Mais les premières visites (isUpdate=false) passent pour permettre un retour
       const isIpKilled = await client.sIsMember('ip_kill', publicIp);
       

