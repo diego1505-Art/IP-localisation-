@@ -1,13 +1,30 @@
 import { createClient } from 'redis';
 
 export default async function handler(req, res) {
-  if (!process.env.REDIS_URL) {
-    return res.status(500).json({ error: "REDIS_URL n'est pas configuré." });
+  const redisUrl = process.env.REDIS_URL || process.env.KV_URL;
+  
+  if (!redisUrl) {
+    return res.status(500).json({ error: "Base de données non configurée (REDIS_URL/KV_URL manquant)" });
   }
 
-  const client = createClient({ url: process.env.REDIS_URL });
-  client.on('error', (err) => console.log('Redis Client Error', err));
-  await client.connect();
+  const client = createClient({ 
+    url: redisUrl,
+    socket: {
+      connectTimeout: 10000,
+      reconnectStrategy: false
+    }
+  });
+
+  client.on('error', (err) => {
+    console.error('Erreur Client Redis:', err);
+  });
+
+  try {
+    await client.connect();
+  } catch (err) {
+    console.error("Échec de connexion Redis:", err);
+    return res.status(500).json({ error: "Impossible de se connecter à la base de données" });
+  }
 
   const { sessionId } = req.query;
 

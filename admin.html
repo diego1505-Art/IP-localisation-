@@ -93,6 +93,20 @@
         #session-list::-webkit-scrollbar { width: 6px; }
         #session-list::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
 
+        /* Nouveau Panel Status */
+        .status-radar {
+            margin: 10px;
+            padding: 15px;
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 0.85rem;
+        }
+        .status-radar h4 { margin: 0 0 10px 0; color: var(--accent-primary); font-size: 0.9rem; display: flex; align-items: center; gap: 8px; }
+        .status-line { display: flex; justify-content: space-between; margin-bottom: 5px; color: var(--text-dim); }
+        .status-ok { color: var(--accent-success); font-weight: bold; }
+        .status-err { color: var(--danger); font-weight: bold; }
+
         .session-item { 
             padding: 12px; 
             border-radius: 10px;
@@ -198,6 +212,22 @@
         <div id="session-list">
             <p style="padding: 20px; color: var(--text-dim); text-align: center;">Recherche de cibles...</p>
         </div>
+
+        <!-- Panel État du Radar -->
+        <div class="status-radar">
+            <h4>📡 État du Radar :</h4>
+            <div class="status-line">
+                <span>• API :</span>
+                <span id="status-api" class="status-ok">Connectée ✅</span>
+            </div>
+            <div class="status-line">
+                <span>• Base :</span>
+                <span id="status-base" class="status-ok">Connectée ✅</span>
+            </div>
+            <p id="status-msg" style="margin: 10px 0 0 0; font-size: 0.75rem; color: var(--text-dim); font-style: italic;">
+                En attente d'une visite sur le site...
+            </p>
+        </div>
     </div>
     <div id="map"></div>
     <div id="info-panel" class="info-panel">
@@ -231,8 +261,25 @@
         async function loadSessions() {
             try {
                 const res = await fetch('/api/sessions');
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const statusApi = document.getElementById('status-api');
+                const statusBase = document.getElementById('status-base');
+                const statusMsg = document.getElementById('status-msg');
+
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    statusBase.innerHTML = 'Erreur ❌';
+                    statusBase.className = 'status-err';
+                    statusMsg.innerText = errorData.error || "Erreur de connexion base";
+                    throw new Error(errorData.error || `HTTP ${res.status}`);
+                }
+
                 const data = await res.json();
+                
+                // Si on arrive ici, l'API et la Base sont OK
+                statusBase.innerHTML = 'Connectée ✅';
+                statusBase.className = 'status-ok';
+                statusMsg.innerText = data.sessions?.length > 0 ? `${data.sessions.length} cible(s) détectée(s)` : "En attente d'une visite...";
+
                 const list = document.getElementById('session-list');
                 
                 if (!data.sessions || data.sessions.length === 0) {
@@ -263,6 +310,14 @@
                 });
             } catch (e) {
                 console.error(e);
+                const statusApi = document.getElementById('status-api');
+                const statusBase = document.getElementById('status-base');
+                
+                statusApi.innerHTML = 'Déconnectée ❌';
+                statusApi.className = 'status-err';
+                statusBase.innerHTML = 'Inconnu ❓';
+                statusBase.className = 'status-dim';
+
                 document.getElementById('session-list').innerHTML = `<div style="padding: 20px; color: var(--danger);">Erreur de connexion radar</div>`;
             }
         }

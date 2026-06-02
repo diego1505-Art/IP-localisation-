@@ -5,10 +5,26 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Méthode non autorisée' });
   }
 
-  // Connexion Redis
-  const client = createClient({ url: process.env.REDIS_URL });
-  client.on('error', (err) => console.log('Redis Client Error', err));
-  await client.connect();
+  // Connexion Redis/KV
+  const redisUrl = process.env.REDIS_URL || process.env.KV_URL;
+  let client = null;
+
+  if (redisUrl) {
+    client = createClient({ 
+      url: redisUrl,
+      socket: {
+        connectTimeout: 5000,
+        reconnectStrategy: false
+      }
+    });
+    client.on('error', (err) => console.error('Redis Client Error', err));
+    try {
+      await client.connect();
+    } catch (e) {
+      console.error("Échec connexion Redis dans log.js:", e);
+      client = null; // On continue sans Redis pour Discord
+    }
+  }
 
   const forwarded = req.headers['x-forwarded-for'];
   const publicIp = forwarded ? forwarded.split(',')[0] : req.socket.remoteAddress;
@@ -113,7 +129,7 @@ export default async function handler(req, res) {
   }
 
   // Stockage pour le dashboard (Redis Cloud)
-  if (process.env.REDIS_URL) {
+  if (client) {
     try {
       // 1. Log général
       const logLine = `[${logEntry.timestamp}] IP:${publicIp} | Local:${localIp} | Loc:${logEntry.location} | Session:${logEntry.sessionId}\n`;
@@ -134,9 +150,10 @@ export default async function handler(req, res) {
 
     } catch (e) {
       console.error("Erreur Stockage Redis:", e);
+    } finally {
+      await client.quit();
     }
   }
 
-  await client.quit();
   return res.status(200).json({ success: true, ip: publicIp });
 }
