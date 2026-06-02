@@ -69,6 +69,7 @@
 
         .btn-refresh { background: var(--accent-primary); color: white; }
         .btn-refresh:hover { background: #2563eb; transform: translateY(-1px); }
+        .btn-refresh.active { background: var(--accent-success); }
         .btn-clear { background: #334155; color: white; }
         .btn-clear:hover { background: #475569; }
 
@@ -262,6 +263,8 @@
         <h2>
             Radar
             <div class="btn-group">
+                <button id="btn-satellite" class="btn-clear" onclick="toggleSatellite()" title="Vue Satellite">🛰️</button>
+                <button id="btn-follow" class="btn-clear" onclick="toggleFollow()" title="Suivre la cible">🎯</button>
                 <button class="btn-clear" onclick="clearAll()">Vider</button>
                 <button class="btn-refresh" onclick="loadSessions()"><span>🔄</span></button>
             </div>
@@ -300,14 +303,45 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const map = L.map('map', {
-            zoomControl: false
+            zoomControl: false,
+            maxZoom: 22 // Zoom plus profond
         }).setView([46.2276, 2.2137], 5);
         
         L.control.zoom({ position: 'topright' }).addTo(map);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap',
+            maxZoom: 19
         }).addTo(map);
+
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community',
+            maxZoom: 22
+        });
+
+        let isSatellite = false;
+        let isFollowMode = false;
+
+        function toggleSatellite() {
+            isSatellite = !isSatellite;
+            const btn = document.getElementById('btn-satellite');
+            if (isSatellite) {
+                map.removeLayer(osmLayer);
+                satelliteLayer.addTo(map);
+                btn.classList.add('active');
+            } else {
+                map.removeLayer(satelliteLayer);
+                osmLayer.addTo(map);
+                btn.classList.remove('active');
+            }
+        }
+
+        function toggleFollow() {
+            isFollowMode = !isFollowMode;
+            const btn = document.getElementById('btn-follow');
+            if (isFollowMode) btn.classList.add('active');
+            else btn.classList.remove('active');
+        }
 
         let sessionTracks = {};
         let selectedSessionIds = new Set();
@@ -585,6 +619,11 @@
 
                     const currentMarker = L.marker([lastPos.lat, lastPos.lon], { icon: currentIcon }).addTo(map);
                     track.markers.push(currentMarker);
+
+                    // Auto-centrage si mode activé et session unique sélectionnée
+                    if (isFollowMode && selectedSessionIds.size === 1) {
+                        map.setView([lastPos.lat, lastPos.lon], map.getZoom());
+                    }
 
                 } catch (e) { console.error(e); }
             }
