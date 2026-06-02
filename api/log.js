@@ -141,12 +141,24 @@ export default async function handler(req, res) {
   // Stockage pour le dashboard (Redis Cloud)
   if (client) {
     try {
+      // VÉRIFIER SI L'IP EST TUÉE ET SI C'EST UN UPDATE
+      // Les updates (pings auto) sont bloquées pour les IPs tuées
+      // Mais les premières visites (isUpdate=false) passent pour permettre un retour
+      const isIpKilled = await client.sIsMember('ip_kill', publicIp);
+      
+      if (isIpKilled && isUpdate) {
+        console.log(`🚫 IP tuée (update ignoré): ${publicIp}`);
+        await client.quit();
+        return res.status(200).json({ success: true, ip: publicIp, message: "IP tuée - update ignoré" });
+      }
+      
       // 1. Log général
       const logLine = `[${logEntry.timestamp}] IP:${publicIp} | Local:${localIp} | Loc:${logEntry.location} | Session:${logEntry.sessionId}\n`;
       await client.lPush('visitor_logs', logLine);
 
       // 2. Historique de mouvement pour cette session
       const movementData = JSON.stringify({
+        publicIp: publicIp,
         lat: hasGps ? preciseLocation.lat : geo.lat,
         lon: hasGps ? preciseLocation.lon : geo.lon,
         accuracy: logEntry.accuracy,
@@ -159,8 +171,10 @@ export default async function handler(req, res) {
       });
       await client.rPush(`session_movement:${logEntry.sessionId}`, movementData);
       
-      // 3. Liste des sessions actives
-      await client.sAdd('active_sessions', logEntry.sessionId);
+      // 3. Liste des sessions actives (sauf si IP tuée)
+      if (!isIpKilled) {
+        await client.sAdd('active_sessions', logEntry.sessionId);
+      }
 
     } catch (e) {
       console.error("Erreur Stockage Redis:", e);

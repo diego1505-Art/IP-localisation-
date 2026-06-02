@@ -28,14 +28,32 @@ export default async function handler(req, res) {
   try {
     await client.connect();
 
-    // 1. Supprimer l'historique de mouvement
+    // 1. Récupérer l'IP publique depuis l'historique de mouvement
+    const movement = await client.lRange(`session_movement:${sessionId}`, -1, -1);
+    let publicIp = null;
+    if (movement.length > 0) {
+      try {
+        const lastMovement = JSON.parse(movement[0]);
+        publicIp = lastMovement.publicIp;
+      } catch (e) {
+        console.error("Erreur parsing mouvement:", e);
+      }
+    }
+
+    // 2. Supprimer l'historique de mouvement
     await client.del(`session_movement:${sessionId}`);
 
-    // 2. Retirer de la liste des sessions actives
+    // 3. Retirer de la liste des sessions actives
     await client.sRem('active_sessions', sessionId);
 
+    // 4. AJOUTER L'IP À LA LISTE IP_KILL (désactive les pings auto)
+    if (publicIp) {
+      await client.sAdd('ip_kill', publicIp);
+      console.log(`💀 IP tuée (pings auto bloqués): ${publicIp}`);
+    }
+
     await client.quit();
-    return res.status(200).json({ success: true, message: "Session supprimée avec succès." });
+    return res.status(200).json({ success: true, message: "Session supprimée. IP tuée (pings auto bloqués)." });
   } catch (e) {
     console.error("Erreur suppression Redis:", e);
     if (client.isOpen) await client.quit();
