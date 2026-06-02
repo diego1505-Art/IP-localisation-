@@ -519,6 +519,7 @@
                     const color = getNextColor();
                     sessionTracks[sid] = {
                         markers: [],
+                        accuracyCircles: [],
                         polyline: L.polyline([], {color: color, weight: 4, opacity: 0.8, lineJoin: 'round'}).addTo(map),
                         color: color
                     };
@@ -607,9 +608,13 @@
                 try {
                     const res = await fetch(`/api/sessions?sessionId=${sid}`);
                     const data = await res.json();
-                    const movement = data.movement;
+                    
+                    if (!data.movement || data.movement.length === 0) continue;
 
-                    if (!movement || movement.length === 0) continue;
+                    // FILTRAGE : On ne garde que les points précis (GPS) pour éviter le point à Lille (IP)
+                    const movement = data.movement.filter(m => m.isPrecise === true);
+
+                    if (movement.length === 0) continue;
 
                     const track = sessionTracks[sid];
                     track.markers.forEach(m => map.removeLayer(m));
@@ -619,11 +624,6 @@
                         track.accuracyCircles.forEach(c => map.removeLayer(c));
                     }
                     track.accuracyCircles = [];
-
-                    // FILTRAGE : On ne garde que les points précis (GPS) pour éviter le point à Lille (IP)
-                    const movement = data.movement.filter(m => m.isPrecise === true);
-
-                    if (movement.length === 0) continue;
                     
                     const path = movement.map(m => [m.lat, m.lon]);
                     track.polyline.setLatLngs(path);
