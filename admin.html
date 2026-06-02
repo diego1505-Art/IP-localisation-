@@ -47,12 +47,13 @@
         async function loadSessions() {
             try {
                 const res = await fetch('/api/sessions');
+                if (!res.ok) throw new Error(`Erreur HTTP: ${res.status}`);
                 const data = await res.json();
                 const list = document.getElementById('session-list');
                 list.innerHTML = '';
                 
-                if (data.sessions.length === 0) {
-                    list.innerHTML = '<p style="padding: 15px; color: #888;">Aucune session trouvée.</p>';
+                if (!data.sessions || data.sessions.length === 0) {
+                    list.innerHTML = '<p style="padding: 15px; color: #888;">Aucune session trouvée dans la base de données.</p>';
                     return;
                 }
 
@@ -65,6 +66,14 @@
                 });
             } catch (e) {
                 console.error("Erreur chargement sessions:", e);
+                const list = document.getElementById('session-list');
+                list.innerHTML = `
+                    <div style="padding: 15px; color: #ff4444; font-size: 0.85rem;">
+                        <strong>⚠️ Erreur de connexion API</strong><br>
+                        L'interface ne peut pas contacter le serveur.<br><br>
+                        <em>Note: Si tu es en local (127.0.0.1:5500), les fonctions API ne marchent pas. Déploie sur Vercel ou utilise 'vercel dev'.</em>
+                    </div>
+                `;
             }
         }
 
