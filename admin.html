@@ -232,10 +232,6 @@
         .detail-label { color: var(--text-dim); font-size: 0.85rem; }
         .detail-value { color: var(--text-main); font-weight: 500; font-size: 0.85rem; }
 
-        .accuracy-circle {
-            pointer-events: none;
-        }
-
         .status-container { display: flex; align-items: center; gap: 6px; }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-success); box-shadow: 0 0 8px var(--accent-success); }
 
@@ -347,6 +343,17 @@
             attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community',
             maxZoom: 22
         });
+
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
 
         let isSatellite = false;
         let isFollowMode = false;
@@ -462,7 +469,6 @@
                     const color = getNextColor();
                     sessionTracks[sid] = {
                         markers: [],
-                        accuracyCircles: [], // Ajout des cercles de précision
                         polyline: L.polyline([], {color: color, weight: 4, opacity: 0.8, lineJoin: 'round'}).addTo(map),
                         color: color
                     };
@@ -488,7 +494,6 @@
                     <div class="detail-row"><span class="detail-label">ID Session</span><span class="detail-value">${sid}</span></div>
                     <div class="detail-row"><span class="detail-label">Dernière IP Locale</span><span class="detail-value">${lastPos.localIp || 'Inconnue'}</span></div>
                     <div class="detail-row"><span class="detail-label">Dernière Page</span><span class="detail-value">${lastPos.page || '/'}</span></div>
-                    <div class="detail-row"><span class="detail-label">Précision GPS</span><span class="detail-value">${lastPos.accuracy ? Math.round(lastPos.accuracy) + ' m' : 'Inconnue'}</span></div>
                     <div class="detail-row"><span class="detail-label">Batterie</span><span class="detail-value">${stats.battery !== null ? stats.battery + '%' : 'Inconnue'} ${stats.charging ? '⚡' : ''}</span></div>
                     <div class="detail-row"><span class="detail-label">Connexion</span><span class="detail-value">${stats.connection || 'Inconnue'}</span></div>
                     <div class="detail-row"><span class="detail-label">Vitesse</span><span class="detail-value">${lastPos.speed ? Math.round(lastPos.speed * 3.6) + ' km/h' : '0 km/h'}</span></div>
@@ -519,7 +524,6 @@
                     const color = getNextColor();
                     sessionTracks[sid] = {
                         markers: [],
-                        accuracyCircles: [],
                         polyline: L.polyline([], {color: color, weight: 4, opacity: 0.8, lineJoin: 'round'}).addTo(map),
                         color: color
                     };
@@ -567,9 +571,6 @@
         function removeTrack(sid) {
             if (sessionTracks[sid]) {
                 sessionTracks[sid].markers.forEach(m => map.removeLayer(m));
-                if (sessionTracks[sid].accuracyCircles) {
-                    sessionTracks[sid].accuracyCircles.forEach(c => map.removeLayer(c));
-                }
                 map.removeLayer(sessionTracks[sid].polyline);
                 delete sessionTracks[sid];
             }
@@ -611,8 +612,32 @@
                     
                     if (!data.movement || data.movement.length === 0) continue;
 
-                    // FILTRAGE : On ne garde que les points précis (GPS) pour éviter le point à Lille (IP)
-                    const movement = data.movement.filter(m => m.isPrecise === true);
+                    // FILTRAGE : On ne garde que les points précis (GPS) et on élimine les sauts incohérents (téléportations)
+                    const rawMovement = data.movement.filter(m => m.isPrecise === true);
+                    if (rawMovement.length === 0) continue;
+
+                    const movement = [];
+                    movement.push(rawMovement[0]);
+
+                    for (let i = 1; i < rawMovement.length; i++) {
+                        const prev = movement[movement.length - 1];
+                        const curr = rawMovement[i];
+                        
+                        // Calcul de la vitesse si on a les timestamps
+                        if (prev.unixTime && curr.unixTime) {
+                            const dist = getDistance(prev.lat, prev.lon, curr.lat, curr.lon);
+                            const timeSec = (curr.unixTime - prev.unixTime) / 1000;
+                            
+                            if (timeSec > 0) {
+                                const speedKmh = (dist / timeSec) * 3.6;
+                                // Si la vitesse dépasse 250 km/h sur une longue distance, c'est un saut opérateur
+                                if (speedKmh > 250 && dist > 2000) {
+                                    continue; 
+                                }
+                            }
+                        }
+                        movement.push(curr);
+                    }
 
                     if (movement.length === 0) continue;
 
@@ -620,29 +645,11 @@
                     track.markers.forEach(m => map.removeLayer(m));
                     track.markers = [];
                     
-                    if (track.accuracyCircles) {
-                        track.accuracyCircles.forEach(c => map.removeLayer(c));
-                    }
-                    track.accuracyCircles = [];
-                    
                     const path = movement.map(m => [m.lat, m.lon]);
                     track.polyline.setLatLngs(path);
 
                     const lastPos = movement[movement.length - 1];
                     
-                    // Cercle de précision
-                    if (lastPos.accuracy) {
-                        const circle = L.circle([lastPos.lat, lastPos.lon], {
-                            radius: lastPos.accuracy,
-                            color: track.color,
-                            fillColor: track.color,
-                            fillOpacity: 0.15,
-                            weight: 1,
-                            className: 'accuracy-circle'
-                        }).addTo(map);
-                        track.accuracyCircles.push(circle);
-                    }
-
                     // Marqueur pulsant pour la position actuelle
                     const currentIcon = L.divIcon({
                         className: 'custom-div-icon',
