@@ -434,7 +434,9 @@
                 }
 
                 list.innerHTML = '';
-                data.sessions.reverse().forEach(sid => {
+                data.sessions.reverse().forEach(session => {
+                    const sid = session.sessionId;
+                    const displayName = session.displayName || sid;
                     const isChecked = selectedSessionIds.has(sid);
                     const isDiscord = discordLiveIds.has(sid);
                     const div = document.createElement('div');
@@ -447,7 +449,7 @@
                                 onchange="event.stopPropagation(); toggleSession('${sid}', this.checked)">
                         </div>
                         <div class="session-info" onclick="toggleSession('${sid}', ${!isChecked})">
-                            <span class="sid-text"><span class="color-tag" style="background: ${color}"></span>${sid}</span>
+                            <span class="sid-text"><span class="color-tag" style="background: ${color}"></span>${displayName}</span>
                             <span class="sid-sub">${isDiscord ? '<span style="color:var(--danger); font-weight:bold;">● LIVE DISCORD</span>' : 'Actif en arrière-plan'}</span>
                         </div>
                         <div style="display:flex; gap:2px; align-items:center;">

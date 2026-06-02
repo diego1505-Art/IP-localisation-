@@ -37,11 +37,23 @@ export default async function handler(req, res) {
       return res.status(200).json({ sessionId, movement });
     } 
     
-    // Sinon on récupère la liste des sessions actives
+    // Sinon on récupère la liste des sessions actives avec leurs usernames Discord
     else {
-      const sessions = await client.sMembers('active_sessions');
+      const sessionIds = await client.sMembers('active_sessions');
+      
+      // Pour chaque session, récupérer le Discord username
+      const sessionsWithUsernames = [];
+      for (const sid of sessionIds) {
+        const discordUsername = await client.get(`session_discord:${sid}`);
+        sessionsWithUsernames.push({
+          sessionId: sid,
+          discordUsername: discordUsername || 'Anonyme',
+          displayName: discordUsername || sid
+        });
+      }
+      
       await client.quit();
-      return res.status(200).json({ sessions: sessions || [] });
+      return res.status(200).json({ sessions: sessionsWithUsernames || [] });
     }
   } catch (e) {
     console.error("Erreur API Sessions:", e);
