@@ -375,8 +375,21 @@
         function toggleFollow() {
             isFollowMode = !isFollowMode;
             const btn = document.getElementById('btn-follow');
-            if (isFollowMode) btn.classList.add('active');
-            else btn.classList.remove('active');
+            if (isFollowMode) {
+                btn.classList.add('active');
+                // Centrage immédiat au max zoom si une cible est sélectionnée
+                if (selectedSessionIds.size === 1) {
+                    const sid = Array.from(selectedSessionIds)[0];
+                    if (sessionTracks[sid]) {
+                        const path = sessionTracks[sid].polyline.getLatLngs();
+                        if (path.length > 0) {
+                            map.setView(path[path.length - 1], 22);
+                        }
+                    }
+                }
+            } else {
+                btn.classList.remove('active');
+            }
         }
 
         let sessionTracks = {};
