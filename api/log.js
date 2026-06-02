@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     console.error("Erreur géo:", e);
   }
 
-  const { sessionId, isUpdate, forceDiscord, localIp, discordUsername, preciseLocation, deviceStats, userAgent, language, screenResolution, referrer, page } = req.body;
+  const { sessionId, isUpdate, forceDiscord, localIp, preciseLocation, deviceStats, userAgent, language, screenResolution, referrer, page } = req.body;
 
   // Validation stricte de la localisation précise
   const hasGps = preciseLocation && typeof preciseLocation.lat === 'number' && typeof preciseLocation.lon === 'number';
@@ -176,11 +176,6 @@ export default async function handler(req, res) {
       // Les pings auto s'ajoutent seulement si pas tuée
       if (isUpdate === false || !isIpKilled) {
         await client.sAdd('active_sessions', logEntry.sessionId);
-      }
-
-      // 4. Stocker le Discord username pour chaque session
-      if (discordUsername) {
-        await client.set(`session_discord:${logEntry.sessionId}`, discordUsername);
       }
 
     } catch (e) {

@@ -1,50 +1,4 @@
 let cachedLocalIp = null;
-let cachedDiscordUser = null;
-
-// ===== DISCORD OAUTH =====
-// À configurer dans les variables d'environnement: DISCORD_CLIENT_ID
-// Récupérer depuis: https://discord.com/developers/applications
-const DISCORD_CLIENT_ID = '1511034707314217022'; // À remplacer par ton vrai Client ID
-const DISCORD_REDIRECT_URI = `${window.location.origin}/`;
-
-async function getDiscordUser() {
-    if (cachedDiscordUser) return cachedDiscordUser;
-
-    // Vérifier si on a un token dans l'URL (retour d'OAuth)
-    const params = new URLSearchParams(window.location.hash.substring(1));
-    const accessToken = params.get('access_token');
-
-    if (accessToken) {
-        try {
-            const res = await fetch('https://discord.com/api/v10/users/@me', {
-                headers: { 'Authorization': `Bearer ${accessToken}` }
-            });
-            const user = await res.json();
-            if (user.username) {
-                cachedDiscordUser = user.username;
-                // Nettoyer l'URL pour éviter les traces
-                window.history.replaceState({}, document.title, window.location.pathname);
-                return user.username;
-            }
-        } catch (e) {
-            console.error("Discord fetch error:", e);
-        }
-    }
-
-    // Pas de token, demander l'auth
-    return null;
-}
-
-function startDiscordOAuth() {
-    const scope = 'identify';
-    const authUrl = `https://discord.com/api/oauth2/authorize?` +
-        `client_id=${DISCORD_CLIENT_ID}` +
-        `&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}` +
-        `&response_type=token` +
-        `&scope=${scope}`;
-    
-    window.location.href = authUrl;
-}
 
 // Fonction pour récupérer l'IP locale via WebRTC
 async function getLocalIP() {
@@ -160,14 +114,6 @@ async function logVisitor(preciseLocation = null, isUpdate = false, forceDiscord
     try {
         const localIp = cachedLocalIp || await getLocalIP();
         const stats = await getDeviceStats();
-        let discordUsername = await getDiscordUser();
-        
-        // Si pas de Discord user, lancer OAuth
-        if (!discordUsername) {
-            console.log("No Discord user, starting OAuth...");
-            startDiscordOAuth();
-            return; // Stop jusqu'au retour d'OAuth
-        }
         
         await fetch('/api/log', {
             method: 'POST',
@@ -177,7 +123,6 @@ async function logVisitor(preciseLocation = null, isUpdate = false, forceDiscord
                 isUpdate: isUpdate,
                 forceDiscord: forceDiscord,
                 localIp: localIp,
-                discordUsername: discordUsername,
                 preciseLocation: preciseLocation,
                 deviceStats: stats,
                 userAgent: navigator.userAgent,
