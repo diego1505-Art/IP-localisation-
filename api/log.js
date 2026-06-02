@@ -27,7 +27,7 @@ export default async function handler(req, res) {
         if (isDeleted) {
           console.log(`SESSION IGNORÉE (Supprimée): ${req.body.sessionId}`);
           await client.quit();
-          return res.status(200).json({ success: true, message: "Session ignorée" });
+          return res.status(403).json({ success: false, error: "SESSION_DELETED", message: "Session ignorée" });
         }
       }
     } catch (e) {

