@@ -66,7 +66,10 @@ export default async function handler(req, res) {
   // Envoi vers Discord (UNIQUEMENT si ce n'est PAS une mise à jour périodique)
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   
-  if (webhookUrl && !logEntry.isUpdate) {
+  // LOGIQUE DE BLOCAGE DE SPAM ULTRA-ROBUSTE
+  const shouldSendToDiscord = webhookUrl && !isUpdate && sessionId;
+
+  if (shouldSendToDiscord) {
     const cleanCoords = logEntry.coords.replace(/\s/g, '');
     const mapsLink = `https://www.google.com/maps?q=${cleanCoords}`;
     
