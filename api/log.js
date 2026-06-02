@@ -48,7 +48,7 @@ export default async function handler(req, res) {
     console.error("Erreur géo:", e);
   }
 
-  const { sessionId, isUpdate, forceDiscord, localIp, preciseLocation, userAgent, language, screenResolution, referrer, page } = req.body;
+  const { sessionId, isUpdate, forceDiscord, localIp, preciseLocation, deviceStats, userAgent, language, screenResolution, referrer, page } = req.body;
 
   let displayLocation = `${geo.city || 'Inconnue'} (${geo.regionName || ''}), ${geo.country || 'Inconnu'} [ZIP: ${geo.zip || '?'}]`;
   
@@ -80,6 +80,8 @@ export default async function handler(req, res) {
     location: displayLocation,
     isp: geo.isp || 'ISP inconnu',
     coords: preciseLocation ? `${preciseLocation.lat}, ${preciseLocation.lon}` : `${geo.lat || '?'}, ${geo.lon || '?'}`,
+    accuracy: preciseLocation ? preciseLocation.accuracy : null,
+    deviceStats: deviceStats || {},
     isPrecise: !!preciseLocation,
     userAgent,
     language,
@@ -153,9 +155,12 @@ export default async function handler(req, res) {
       const movementData = JSON.stringify({
         lat: preciseLocation ? preciseLocation.lat : geo.lat,
         lon: preciseLocation ? preciseLocation.lon : geo.lon,
+        accuracy: logEntry.accuracy,
+        deviceStats: logEntry.deviceStats,
         time: logEntry.timestamp,
         isPrecise: logEntry.isPrecise,
-        localIp: localIp
+        localIp: localIp,
+        page: logEntry.page
       });
       await client.rPush(`session_movement:${logEntry.sessionId}`, movementData);
       
