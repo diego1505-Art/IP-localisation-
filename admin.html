@@ -7,42 +7,60 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; height: 100vh; background: #1a1a1a; color: white; }
-        #sidebar { width: 300px; background: #222; border-right: 1px solid #333; display: flex; flex-direction: column; overflow-y: auto; }
+        #sidebar { width: 320px; background: #222; border-right: 1px solid #333; display: flex; flex-direction: column; overflow-y: auto; }
         #map { flex: 1; }
-        .session-item { padding: 15px; border-bottom: 1px solid #333; cursor: pointer; transition: background 0.2s; }
+        .session-item { padding: 12px 15px; border-bottom: 1px solid #333; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; gap: 10px; }
         .session-item:hover { background: #333; }
-        .session-item.active { background: #444; border-left: 4px solid #00ff00; }
-        h2 { padding: 15px; margin: 0; background: #111; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; }
-        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #00ff00; display: inline-block; margin-right: 5px; }
-        .info-panel { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; z-index: 1000; font-size: 0.9rem; max-width: 300px; display: none; }
+        .session-item.active { background: #3a3a3a; }
+        .session-checkbox { width: 18px; height: 18px; cursor: pointer; }
+        .session-info { flex: 1; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; }
+        h2 { padding: 15px; margin: 0; background: #111; font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #00ff00; display: inline-block; }
+        .info-panel { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 8px; z-index: 1000; font-size: 0.9rem; max-width: 320px; display: none; border: 1px solid #444; }
+        .color-preview { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
     </style>
 </head>
 <body>
     <div id="sidebar">
-        <h2>Sessions Actives <button onclick="loadSessions()" style="font-size: 0.8rem; cursor: pointer;">🔄</button></h2>
+        <h2>
+            Sessions Actives 
+            <div style="display: flex; gap: 5px;">
+                <button onclick="clearAll()" style="font-size: 0.7rem; cursor: pointer; background: #444; color: white; border: none; padding: 5px 8px; border-radius: 4px;">Vider</button>
+                <button onclick="loadSessions()" style="font-size: 0.8rem; cursor: pointer; background: #007bff; color: white; border: none; padding: 5px 8px; border-radius: 4px;">🔄</button>
+            </div>
+        </h2>
         <div id="session-list">
             <p style="padding: 15px; color: #888;">Chargement...</p>
         </div>
     </div>
     <div id="map"></div>
     <div id="info-panel" class="info-panel">
-        <h3 id="info-id" style="margin-top: 0;">-</h3>
-        <p><strong>Dernière position :</strong> <span id="info-time">-</span></p>
-        <p><strong>IP Locale :</strong> <span id="info-local">-</span></p>
-        <p><strong>Type :</strong> <span id="info-type">-</span></p>
+        <h3 style="margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Dernière Activité</h3>
+        <div id="active-info-content"></div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        const map = L.map('map').setView([46.2276, 2.2137], 6); // Centré sur la France
+        const map = L.map('map').setView([46.2276, 2.2137], 6);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        let markers = [];
-        let polyline = L.polyline([], {color: 'red', weight: 3}).addTo(map);
-        let currentSessionId = null;
+        // Stockage des données par session
+        // { sessionId: { markers: [], polyline: L.polyline, color: string } }
+        let sessionTracks = {};
+        let selectedSessionIds = new Set();
         let updateInterval = null;
+
+        // Couleurs pour différencier les tracés
+        const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffa500', '#ffffff'];
+        let colorIndex = 0;
+
+        function getNextColor() {
+            const color = colors[colorIndex];
+            colorIndex = (colorIndex + 1) % colors.length;
+            return color;
+        }
 
         async function loadSessions() {
             try {
@@ -53,102 +71,136 @@
                 list.innerHTML = '';
                 
                 if (!data.sessions || data.sessions.length === 0) {
-                    list.innerHTML = '<p style="padding: 15px; color: #888;">Aucune session trouvée dans la base de données.</p>';
+                    list.innerHTML = '<p style="padding: 15px; color: #888;">Aucune session trouvée.</p>';
                     return;
                 }
 
                 data.sessions.reverse().forEach(sid => {
+                    const isChecked = selectedSessionIds.has(sid);
                     const div = document.createElement('div');
-                    div.className = 'session-item' + (sid === currentSessionId ? ' active' : '');
-                    div.innerHTML = `<span class="status-dot"></span> Session: ${sid.substring(0, 8)}...`;
-                    div.onclick = () => selectSession(sid);
+                    div.className = 'session-item' + (isChecked ? ' active' : '');
+                    
+                    // On récupère la couleur si elle existe déjà
+                    const color = sessionTracks[sid] ? sessionTracks[sid].color : '#555';
+
+                    div.innerHTML = `
+                        <input type="checkbox" class="session-checkbox" ${isChecked ? 'checked' : ''} onchange="toggleSession('${sid}', this.checked)">
+                        <div class="session-info">
+                            <span class="color-preview" style="background: ${color}"></span>
+                            Session: ${sid.substring(0, 8)}...
+                        </div>
+                        <span class="status-dot"></span>
+                    `;
                     list.appendChild(div);
                 });
             } catch (e) {
                 console.error("Erreur chargement sessions:", e);
                 const list = document.getElementById('session-list');
-                list.innerHTML = `
-                    <div style="padding: 15px; color: #ff4444; font-size: 0.85rem;">
-                        <strong>⚠️ Erreur de connexion API</strong><br>
-                        L'interface ne peut pas contacter le serveur.<br><br>
-                        <em>Note: Si tu es en local (127.0.0.1:5500), les fonctions API ne marchent pas. Déploie sur Vercel ou utilise 'vercel dev'.</em>
-                    </div>
-                `;
+                list.innerHTML = `<div style="padding: 15px; color: #ff4444;">Erreur API</div>`;
             }
         }
 
-        async function selectSession(sid) {
-            currentSessionId = sid;
-            document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'));
-            const items = document.querySelectorAll('.session-item');
-            items.forEach(item => {
-                if (item.innerText.includes(sid.substring(0, 8))) item.classList.add('active');
-            });
-
-            if (updateInterval) clearInterval(updateInterval);
-            trackSession();
-            updateInterval = setInterval(trackSession, 5000); // Rafraîchir toutes les 5s
+        function toggleSession(sid, isChecked) {
+            if (isChecked) {
+                selectedSessionIds.add(sid);
+                if (!sessionTracks[sid]) {
+                    sessionTracks[sid] = {
+                        markers: [],
+                        polyline: L.polyline([], {color: getNextColor(), weight: 3}).addTo(map),
+                        color: '' // Sera définie par la polyline
+                    };
+                    sessionTracks[sid].color = sessionTracks[sid].polyline.options.color;
+                }
+            } else {
+                selectedSessionIds.delete(sid);
+                removeTrack(sid);
+            }
+            updateMap();
+            loadSessions(); // Pour mettre à jour les couleurs dans la liste
         }
 
-        async function trackSession() {
-            if (!currentSessionId) return;
-            try {
-                const res = await fetch(`/api/sessions?sessionId=${currentSessionId}`);
-                const data = await res.json();
-                const movement = data.movement;
-
-                if (movement.length === 0) return;
-
-                // Nettoyer la carte
-                markers.forEach(m => map.removeLayer(m));
-                markers = [];
-                
-                const path = movement.map(m => [m.lat, m.lon]);
-                polyline.setLatLngs(path);
-
-                const lastPos = movement[movement.length - 1];
-                
-                // Vérifier si c'est la "Maison" (IP locale stable ou première position GPS)
-                // On peut définir "Maison" si on a une IP locale de type 192.168.x.x
-                const isHome = lastPos.localIp && (lastPos.localIp.startsWith('192.168.') || lastPos.localIp.startsWith('10.') || lastPos.localIp.startsWith('172.16.'));
-
-                // Ajouter les marqueurs
-                movement.forEach((pos, index) => {
-                    const isLast = index === movement.length - 1;
-                    const isFirst = index === 0;
-                    
-                    let markerColor = isLast ? 'red' : (isFirst ? 'green' : 'blue');
-                    let title = isLast ? "Position Actuelle" : (isFirst ? "Début" : `Point ${index}`);
-                    
-                    if (isHome && isFirst) title = "🏠 Maison";
-
-                    const marker = L.circleMarker([pos.lat, pos.lon], {
-                        radius: isLast ? 8 : 4,
-                        color: markerColor,
-                        fillOpacity: 0.8
-                    }).addTo(map).bindPopup(`${title}<br>${pos.time}`);
-                    
-                    markers.push(marker);
-                });
-
-                // Zoomer sur la dernière position
-                map.panTo([lastPos.lat, lastPos.lon]);
-
-                // Update info panel
-                const panel = document.getElementById('info-panel');
-                panel.style.display = 'block';
-                document.getElementById('info-id').innerText = `Session: ${currentSessionId.substring(0, 12)}`;
-                document.getElementById('info-time').innerText = lastPos.time;
-                document.getElementById('info-local').innerText = lastPos.localIp || 'Inconnue';
-                document.getElementById('info-type').innerText = isHome ? "Maison (WiFi)" : (lastPos.isPrecise ? "GPS Mobile" : "IP Approximatif");
-
-            } catch (e) {
-                console.error("Erreur tracking:", e);
+        function removeTrack(sid) {
+            if (sessionTracks[sid]) {
+                sessionTracks[sid].markers.forEach(m => map.removeLayer(m));
+                map.removeLayer(sessionTracks[sid].polyline);
+                delete sessionTracks[sid];
+            }
+            if (selectedSessionIds.size === 0) {
+                document.getElementById('info-panel').style.display = 'none';
             }
         }
 
-        loadSessions();
-        setInterval(loadSessions, 15000);
-    </script>
-</body>
-</html>
+        function clearAll() {
+            Object.keys(sessionTracks).forEach(sid => removeTrack(sid));
+            selectedSessionIds.clear();
+            loadSessions();
+        }
+
+        async function updateMap() {
+            if (selectedSessionIds.size === 0) return;
+
+            const infoPanel = document.getElementById('info-panel');
+            const infoContent = document.getElementById('active-info-content');
+            infoContent.innerHTML = '';
+            infoPanel.style.display = 'block';
+
+            for (const sid of selectedSessionIds) {
+                try {
+                    const res = await fetch(`/api/sessions?sessionId=${sid}`);
+                    const data = await res.json();
+                    const movement = data.movement;
+
+                    if (!movement || movement.length === 0) continue;
+
+                    const track = sessionTracks[sid];
+                    
+                    // Nettoyer anciens marqueurs
+                    track.markers.forEach(m => map.removeLayer(m));
+                    track.markers = [];
+                    
+                    const path = movement.map(m => [m.lat, m.lon]);
+                    track.polyline.setLatLngs(path);
+
+                    const lastPos = movement[movement.length - 1];
+                    const isHome = lastPos.localIp && (lastPos.localIp.startsWith('192.168.') || lastPos.localIp.startsWith('10.') || lastPos.localIp.startsWith('172.16.'));
+
+                    // Ajouter marqueurs (uniquement début et fin pour ne pas surcharger si plusieurs)
+                    const startMarker = L.circleMarker([movement[0].lat, movement[0].lon], {
+                        radius: 5, color: 'green', fillOpacity: 0.8
+                    }).addTo(map).bindPopup(`<b>Début</b><br>Session: ${sid.substring(0,8)}<br>${movement[0].time}`);
+                    track.markers.push(startMarker);
+
+                    const currentMarker = L.circleMarker([lastPos.lat, lastPos.lon], {
+                        radius: 8, color: track.color, fillOpacity: 0.9, weight: 3
+                    }).addTo(map).bindPopup(`<b>ACTUEL</b><br>Session: ${sid.substring(0,8)}<br>${isHome ? '🏠 Maison' : ''}<br>${lastPos.time}`);
+                    track.markers.push(currentMarker);
+
+                    // Update info panel
+                    const infoDiv = document.createElement('div');
+                    infoDiv.style.marginBottom = '10px';
+                    infoDiv.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:5px;">
+                            <span class="color-preview" style="background: ${track.color}"></span>
+                            <strong>${sid.substring(0,8)}</strong>
+                        </div>
+                        <div style="font-size: 0.8rem; color: #ccc; margin-left: 17px;">
+                            ${lastPos.time}<br>
+                            IP: ${lastPos.localIp || '?'}<br>
+                            Status: ${isHome ? '🏠 Maison' : '📍 Mobile'}
+                        </div>
+                    `;
+                    infoContent.appendChild(infoDiv);
+
+                } catch (e) {
+                    console.error(`Erreur tracking session ${sid}:`, e);
+                }
+            }
+        }
+
+        // Initialisation
+         loadSessions();
+         setInterval(loadSessions, 10000); // Rafraîchir la liste toutes les 10s
+         setInterval(updateMap, 5000);    // Rafraîchir les positions toutes les 5s
+     </script>
+ </body>
+ </html>
