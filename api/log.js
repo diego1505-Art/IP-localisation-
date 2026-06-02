@@ -171,8 +171,10 @@ export default async function handler(req, res) {
       });
       await client.rPush(`session_movement:${logEntry.sessionId}`, movementData);
       
-      // 3. Liste des sessions actives (sauf si IP tuée)
-      if (!isIpKilled) {
+      // 3. Liste des sessions actives
+      // Les vraies visites (isUpdate=false) réactivent TOUJOURS la session
+      // Les pings auto s'ajoutent seulement si pas tuée
+      if (isUpdate === false || !isIpKilled) {
         await client.sAdd('active_sessions', logEntry.sessionId);
       }
 
