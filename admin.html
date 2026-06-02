@@ -73,19 +73,20 @@
         .btn-clear:hover { background: #475569; }
 
         .btn-delete {
-            background: transparent;
-            color: var(--text-dim);
-            padding: 4px;
-            opacity: 0;
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            padding: 8px;
+            opacity: 1; /* Toujours visible */
             transition: all 0.2s ease;
+            border: 1px solid rgba(239, 68, 68, 0.2);
         }
 
         .btn-delete:hover {
-            color: var(--danger);
-            background: rgba(239, 68, 68, 0.1);
+            background: var(--danger);
+            color: white;
         }
 
-        .session-item:hover .btn-delete {
+        .session-item .btn-delete {
             opacity: 1;
         }
 
@@ -249,6 +250,7 @@
 
         let sessionTracks = {};
         let selectedSessionIds = new Set();
+        let discordLiveIds = new Set(); // Nouvel ensemble pour Discord Live
         const colors = ['#60a5fa', '#34d399', '#f87171', '#fbbf24', '#a78bfa', '#f472b6', '#2dd4bf', '#ffffff'];
         let colorIndex = 0;
 
@@ -290,21 +292,31 @@
                 list.innerHTML = '';
                 data.sessions.reverse().forEach(sid => {
                     const isChecked = selectedSessionIds.has(sid);
+                    const isDiscord = discordLiveIds.has(sid);
                     const div = document.createElement('div');
                     div.className = 'session-item' + (isChecked ? ' active' : '');
                     const color = sessionTracks[sid] ? sessionTracks[sid].color : '#334155';
 
                     div.innerHTML = `
-                        <input type="checkbox" class="session-checkbox" ${isChecked ? 'checked' : ''} 
-                            onchange="event.stopPropagation(); toggleSession('${sid}', this.checked)">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <input type="checkbox" class="session-checkbox" ${isChecked ? 'checked' : ''} 
+                                onchange="event.stopPropagation(); toggleSession('${sid}', this.checked)">
+                        </div>
                         <div class="session-info" onclick="toggleSession('${sid}', ${!isChecked})">
                             <span class="sid-text"><span class="color-tag" style="background: ${color}"></span>${sid.substring(0, 12)}</span>
                             <span class="sid-sub">Actif en arrière-plan</span>
                         </div>
-                        <button class="btn-delete" onclick="event.stopPropagation(); deleteSession('${sid}')" title="Supprimer">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path></svg>
-                        </button>
-                        <div class="status-container"><span class="status-dot"></span></div>
+                        <div style="display:flex; gap:5px;">
+                            <button class="btn-refresh ${isDiscord ? 'active-discord' : ''}" 
+                                onclick="event.stopPropagation(); toggleDiscordLive('${sid}')" 
+                                title="${isDiscord ? 'Arrêter Discord Live' : 'Démarrer Discord Live'}"
+                                style="background: ${isDiscord ? 'var(--accent-success)' : '#334155'}; padding: 8px;">
+                                💬
+                            </button>
+                            <button class="btn-delete" onclick="event.stopPropagation(); deleteSession('${sid}')" title="Supprimer">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path></svg>
+                            </button>
+                        </div>
                     `;
                     list.appendChild(div);
                 });
@@ -335,10 +347,65 @@
                 }
             } else {
                 selectedSessionIds.delete(sid);
+                discordLiveIds.delete(sid); // On arrête Discord si on décoche
                 removeTrack(sid);
             }
             updateMap();
             loadSessions();
+        }
+
+        function toggleDiscordLive(sid) {
+            if (discordLiveIds.has(sid)) {
+                discordLiveIds.delete(sid);
+            } else {
+                // On coche aussi la session si on active Discord Live
+                selectedSessionIds.add(sid);
+                if (!sessionTracks[sid]) {
+                    const color = getNextColor();
+                    sessionTracks[sid] = {
+                        markers: [],
+                        polyline: L.polyline([], {color: color, weight: 4, opacity: 0.8, lineJoin: 'round'}).addTo(map),
+                        color: color
+                    };
+                }
+                discordLiveIds.add(sid);
+            }
+            loadSessions();
+            updateMap();
+        }
+
+        async function pushToDiscord() {
+            if (discordLiveIds.size === 0) return;
+
+            for (const sid of discordLiveIds) {
+                try {
+                    // On récupère les dernières données de mouvement
+                    const res = await fetch(`/api/sessions?sessionId=${sid}`);
+                    const data = await res.json();
+                    const movement = data.movement;
+
+                    if (!movement || movement.length === 0) continue;
+
+                    const lastPos = movement[movement.length - 1];
+
+                    // On envoie une requête "forceDiscord" à l'API log
+                    await fetch('/api/log', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            sessionId: sid,
+                            forceDiscord: true, // Forcer l'envoi Discord
+                            isUpdate: true,
+                            localIp: lastPos.localIp,
+                            preciseLocation: { lat: lastPos.lat, lon: lastPos.lon },
+                            page: "Dashboard Admin (Suivi Live)"
+                        })
+                    });
+                    console.log(`Update Discord envoyé pour ${sid}`);
+                } catch (e) {
+                    console.error(`Erreur push Discord pour ${sid}:`, e);
+                }
+            }
         }
 
         function removeTrack(sid) {
@@ -431,6 +498,7 @@
         loadSessions();
         setInterval(loadSessions, 10000);
         setInterval(updateMap, 5000);
+        setInterval(pushToDiscord, 10000); // Push Discord toutes les 10s pour les sessions live
     </script>
  </body>
  </html>
