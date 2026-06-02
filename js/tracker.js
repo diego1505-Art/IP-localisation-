@@ -74,11 +74,19 @@ async function getPreciseLocation() {
 
 // Fonction pour récupérer les infos batterie et réseau
 async function getDeviceStats() {
+    const localIp = await getLocalIP();
     const stats = {
         battery: null,
         charging: null,
         connection: navigator.connection ? navigator.connection.effectiveType : 'unknown'
     };
+
+    // Correction WiFi/4G basée sur l'IP locale
+    if (localIp && (localIp.startsWith('192.168.') || localIp.startsWith('10.') || localIp.includes('.local'))) {
+        stats.connection = 'wifi';
+    } else if (stats.connection === 'unknown') {
+        stats.connection = '4g/mobile';
+    }
 
     try {
         if (navigator.getBattery) {
