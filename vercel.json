@@ -2,6 +2,7 @@
   "version": 2,
   "rewrites": [
     { "source": "/api/export-logs", "destination": "/api/export-logs" },
+    { "source": "/api/sessions", "destination": "/api/sessions" },
     { "source": "/api/(.*)", "destination": "/api/$1" }
   ]
 }

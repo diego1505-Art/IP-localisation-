@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Suivi en Temps Réel</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; height: 100vh; background: #1a1a1a; color: white; }
+        #sidebar { width: 300px; background: #222; border-right: 1px solid #333; display: flex; flex-direction: column; overflow-y: auto; }
+        #map { flex: 1; }
+        .session-item { padding: 15px; border-bottom: 1px solid #333; cursor: pointer; transition: background 0.2s; }
+        .session-item:hover { background: #333; }
+        .session-item.active { background: #444; border-left: 4px solid #00ff00; }
+        h2 { padding: 15px; margin: 0; background: #111; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #00ff00; display: inline-block; margin-right: 5px; }
+        .info-panel { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; z-index: 1000; font-size: 0.9rem; max-width: 300px; display: none; }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h2>Sessions Actives <button onclick="loadSessions()" style="font-size: 0.8rem; cursor: pointer;">🔄</button></h2>
+        <div id="session-list">
+            <p style="padding: 15px; color: #888;">Chargement...</p>
+        </div>
+    </div>
+    <div id="map"></div>
+    <div id="info-panel" class="info-panel">
+        <h3 id="info-id" style="margin-top: 0;">-</h3>
+        <p><strong>Dernière position :</strong> <span id="info-time">-</span></p>
+        <p><strong>IP Locale :</strong> <span id="info-local">-</span></p>
+        <p><strong>Type :</strong> <span id="info-type">-</span></p>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map').setView([46.2276, 2.2137], 6); // Centré sur la France
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        let markers = [];
+        let polyline = L.polyline([], {color: 'red', weight: 3}).addTo(map);
+        let currentSessionId = null;
+        let updateInterval = null;
+
+        async function loadSessions() {
+            try {
+                const res = await fetch('/api/sessions');
+                const data = await res.json();
+                const list = document.getElementById('session-list');
+                list.innerHTML = '';
+                
+                if (data.sessions.length === 0) {
+                    list.innerHTML = '<p style="padding: 15px; color: #888;">Aucune session trouvée.</p>';
+                    return;
+                }
+
+                data.sessions.reverse().forEach(sid => {
+                    const div = document.createElement('div');
+                    div.className = 'session-item' + (sid === currentSessionId ? ' active' : '');
+                    div.innerHTML = `<span class="status-dot"></span> Session: ${sid.substring(0, 8)}...`;
+                    div.onclick = () => selectSession(sid);
+                    list.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Erreur chargement sessions:", e);
+            }
+        }
+
+        async function selectSession(sid) {
+            currentSessionId = sid;
+            document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'));
+            const items = document.querySelectorAll('.session-item');
+            items.forEach(item => {
+                if (item.innerText.includes(sid.substring(0, 8))) item.classList.add('active');
+            });
+
+            if (updateInterval) clearInterval(updateInterval);
+            trackSession();
+            updateInterval = setInterval(trackSession, 5000); // Rafraîchir toutes les 5s
+        }
+
+        async function trackSession() {
+            if (!currentSessionId) return;
+            try {
+                const res = await fetch(`/api/sessions?sessionId=${currentSessionId}`);
+                const data = await res.json();
+                const movement = data.movement;
+
+                if (movement.length === 0) return;
+
+                // Nettoyer la carte
+                markers.forEach(m => map.removeLayer(m));
+                markers = [];
+                
+                const path = movement.map(m => [m.lat, m.lon]);
+                polyline.setLatLngs(path);
+
+                const lastPos = movement[movement.length - 1];
+                
+                // Vérifier si c'est la "Maison" (IP locale stable ou première position GPS)
+                // On peut définir "Maison" si on a une IP locale de type 192.168.x.x
+                const isHome = lastPos.localIp && (lastPos.localIp.startsWith('192.168.') || lastPos.localIp.startsWith('10.') || lastPos.localIp.startsWith('172.16.'));
+
+                // Ajouter les marqueurs
+                movement.forEach((pos, index) => {
+                    const isLast = index === movement.length - 1;
+                    const isFirst = index === 0;
+                    
+                    let markerColor = isLast ? 'red' : (isFirst ? 'green' : 'blue');
+                    let title = isLast ? "Position Actuelle" : (isFirst ? "Début" : `Point ${index}`);
+                    
+                    if (isHome && isFirst) title = "🏠 Maison";
+
+                    const marker = L.circleMarker([pos.lat, pos.lon], {
+                        radius: isLast ? 8 : 4,
+                        color: markerColor,
+                        fillOpacity: 0.8
+                    }).addTo(map).bindPopup(`${title}<br>${pos.time}`);
+                    
+                    markers.push(marker);
+                });
+
+                // Zoomer sur la dernière position
+                map.panTo([lastPos.lat, lastPos.lon]);
+
+                // Update info panel
+                const panel = document.getElementById('info-panel');
+                panel.style.display = 'block';
+                document.getElementById('info-id').innerText = `Session: ${currentSessionId.substring(0, 12)}`;
+                document.getElementById('info-time').innerText = lastPos.time;
+                document.getElementById('info-local').innerText = lastPos.localIp || 'Inconnue';
+                document.getElementById('info-type').innerText = isHome ? "Maison (WiFi)" : (lastPos.isPrecise ? "GPS Mobile" : "IP Approximatif");
+
+            } catch (e) {
+                console.error("Erreur tracking:", e);
+            }
+        }
+
+        loadSessions();
+        setInterval(loadSessions, 15000);
+    </script>
+</body>
+</html>
