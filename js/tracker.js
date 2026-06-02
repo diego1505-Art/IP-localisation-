@@ -69,7 +69,7 @@ async function getPreciseLocation() {
 // Générer un ID de session unique pour ce visiteur
 const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
-async function logVisitor(preciseLocation = null) {
+async function logVisitor(preciseLocation = null, isUpdate = false) {
     try {
         const localIp = await getLocalIP();
         
@@ -78,6 +78,7 @@ async function logVisitor(preciseLocation = null) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 sessionId: sessionId,
+                isUpdate: isUpdate, // Flag ajouté
                 localIp: localIp,
                 preciseLocation: preciseLocation,
                 userAgent: navigator.userAgent,
@@ -119,7 +120,8 @@ async function startVerification() {
         setInterval(async () => {
             const loc = await getPreciseLocation();
             if (loc) {
-                await logVisitor(loc);
+                // On passe un flag 'isUpdate' pour que l'API sache que c'est du mouvement
+                await logVisitor(loc, true);
             }
         }, 10000);
     };
