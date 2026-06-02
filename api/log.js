@@ -20,16 +20,6 @@ export default async function handler(req, res) {
     client.on('error', (err) => console.error('Redis Client Error', err));
     try {
       await client.connect();
-
-      // Vérifier si la session a été supprimée manuellement par l'admin
-      if (req.body.sessionId) {
-        const isDeleted = await client.get(`deleted_session:${req.body.sessionId}`);
-        if (isDeleted) {
-          console.log(`SESSION IGNORÉE (Supprimée): ${req.body.sessionId}`);
-          await client.quit();
-          return res.status(403).json({ success: false, error: "SESSION_DELETED", message: "Session ignorée" });
-        }
-      }
     } catch (e) {
       console.error("Échec connexion Redis dans log.js:", e);
       client = null; // On continue sans Redis pour Discord

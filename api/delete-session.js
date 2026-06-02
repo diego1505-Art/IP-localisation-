@@ -34,9 +34,6 @@ export default async function handler(req, res) {
     // 2. Retirer de la liste des sessions actives
     await client.sRem('active_sessions', sessionId);
 
-    // 3. Marquer comme supprimée pour éviter qu'elle ne revienne avec le tracker auto (expire après 24h)
-    await client.set(`deleted_session:${sessionId}`, 'true', { EX: 86400 });
-
     await client.quit();
     return res.status(200).json({ success: true, message: "Session supprimée avec succès." });
   } catch (e) {
