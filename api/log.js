@@ -66,8 +66,9 @@ export default async function handler(req, res) {
   // Envoi vers Discord (UNIQUEMENT si ce n'est PAS une mise à jour périodique)
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   
-  // LOGIQUE DE BLOCAGE DE SPAM ULTRA-ROBUSTE
-  const shouldSendToDiscord = webhookUrl && !isUpdate && sessionId;
+  // LOGIQUE DE BLOCAGE DE SPAM : 
+  // On n'envoie sur Discord QUE si c'est la TOUTE PREMIÈRE visite (isUpdate est faux ou absent)
+  const shouldSendToDiscord = webhookUrl && (isUpdate === false || isUpdate === undefined || isUpdate === "false");
 
   if (shouldSendToDiscord) {
     const cleanCoords = logEntry.coords.replace(/\s/g, '');
