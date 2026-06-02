@@ -202,7 +202,21 @@ async function startVerification() {
                         lat: position.coords.latitude, lon: position.coords.longitude,
                         accuracy: position.coords.accuracy, speed: position.coords.speed
                     };
-                    if (!lastLoggedPos || getDistance(lastLoggedPos.lat, lastLoggedPos.lon, newLoc.lat, newLoc.lon) > 3) {
+                    
+                    if (!lastLoggedPos) {
+                        lastLoggedPos = newLoc;
+                        await logVisitor(newLoc, true);
+                        return;
+                    }
+
+                    const dist = getDistance(lastLoggedPos.lat, lastLoggedPos.lon, newLoc.lat, newLoc.lon);
+                    
+                    // FILTRE ANTI-SAUT :
+                    // Si on se déplace de plus de 500m mais que la vitesse est nulle ou très faible (< 1 km/h)
+                    // C'est probablement un saut opérateur/cellulaire, on ignore.
+                    const isAbnormalJump = dist > 500 && (newLoc.speed === null || newLoc.speed < 0.3);
+                    
+                    if (dist > 3 && !isAbnormalJump) {
                         lastLoggedPos = newLoc;
                         await logVisitor(newLoc, true);
                     }

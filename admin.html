@@ -617,9 +617,20 @@
                     if (rawMovement.length === 0) continue;
 
                     const movement = [];
-                    movement.push(rawMovement[0]);
+                    
+                    // On cherche le premier point "crédible" (pas un saut opérateur dès le début)
+                    let firstValidIndex = 0;
+                    if (rawMovement.length > 1) {
+                        const d = getDistance(rawMovement[0].lat, rawMovement[0].lon, rawMovement[1].lat, rawMovement[1].lon);
+                        // Si le premier saut est immense (> 5km) alors que la vitesse est nulle, le premier point est probablement faux
+                        if (d > 5000 && (rawMovement[1].speed === null || rawMovement[1].speed < 0.3)) {
+                            firstValidIndex = 1;
+                        }
+                    }
 
-                    for (let i = 1; i < rawMovement.length; i++) {
+                    movement.push(rawMovement[firstValidIndex]);
+
+                    for (let i = firstValidIndex + 1; i < rawMovement.length; i++) {
                         const prev = movement[movement.length - 1];
                         const curr = rawMovement[i];
                         
@@ -630,10 +641,11 @@
                             
                             if (timeSec > 0) {
                                 const speedKmh = (dist / timeSec) * 3.6;
-                                // Si la vitesse dépasse 250 km/h sur une longue distance, c'est un saut opérateur
-                                if (speedKmh > 250 && dist > 2000) {
-                                    continue; 
-                                }
+                                // Si la vitesse calculée est délirante (> 200 km/h) ET que l'appareil dit qu'il ne bouge pas (speed < 1km/h)
+                                // OU si le saut est supérieur à 10km d'un coup
+                                const isJump = (speedKmh > 200 && (curr.speed === null || curr.speed < 0.3)) || dist > 10000;
+                                
+                                if (isJump) continue; 
                             }
                         }
                         movement.push(curr);
