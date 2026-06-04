@@ -582,7 +582,7 @@
                     if (sessionTracks[sid]) {
                         const path = sessionTracks[sid].polyline.getLatLngs();
                         if (path.length > 0) {
-                            map.setView(path[path.length - 1], 18);
+                            map.setView(path[path.length - 1], 22);
                         }
                     }
                 }
@@ -939,7 +939,7 @@
             if (sessionTracks[sid]) {
                 const path = sessionTracks[sid].polyline.getLatLngs();
                 if (path.length > 0) {
-                    map.setView(path[path.length - 1], 18);
+                    map.setView(path[path.length - 1], 22);
                     closeModal();
                 }
             }
@@ -1131,7 +1131,7 @@
 
                     // Auto-centrage si mode activé et session unique sélectionnée
                     if (isFollowMode && selectedSessionIds.size === 1) {
-                        map.setView([lastPos.lat, lastPos.lon], map.getZoom());
+                        map.setView([lastPos.lat, lastPos.lon], 22);
                     }
 
                 } catch (e) { console.error(e); }

@@ -56,23 +56,30 @@ export default async function handler(req, res) {
   // Si on a le GPS, on essaie de trouver l'adresse complète (Reverse Geocoding)
   if (hasGps) {
     try {
-      // On demande plus de détails à Nominatim pour une précision maximale
+      // On demande plus de détails à Nominatim pour une précision maximale (Zoom 18 est le max pour l'adresse)
       const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${preciseLocation.lat}&lon=${preciseLocation.lon}&addressdetails=1&zoom=18`, {
         headers: { 'User-Agent': 'SaadaaTracker/1.0' }
       });
       const revData = await revRes.json();
       if (revData && revData.address) {
         const addr = revData.address;
-        const city = addr.city || addr.town || addr.village || addr.municipality || addr.suburb || addr.neighbourhood;
-        const road = addr.road || addr.pedestrian || addr.street || addr.square;
-        const houseNumber = addr.house_number || "";
+        const houseNumber = addr.house_number || addr.house_name || "";
+        const road = addr.road || addr.pedestrian || addr.street || addr.square || "";
+        const city = addr.city || addr.town || addr.village || addr.municipality || addr.suburb || addr.neighbourhood || "";
         const postcode = addr.postcode || "";
         const state = addr.state || addr.region || "";
         
-        displayLocation = `📍 ${city || 'Ville inconnue'} (${state}), ${addr.country}`;
-        // Construction d'une adresse ultra précise
-        const parts = [houseNumber, road, postcode, city, state, addr.country].filter(p => !!p);
+        // Formatage "Numéro Rue, CodePostal Ville"
+        const addressLine = `${houseNumber} ${road}`.trim();
+        displayLocation = `📍 ${addressLine}, ${city} (${state})`;
+        
+        // Construction de l'adresse postale complète ultra précise
+        const parts = [addressLine, postcode, city, state, addr.country].filter(p => !!p && p.trim() !== "");
         fullAddress = parts.join(', ');
+        
+        if (!houseNumber) {
+            fullAddress += " (Numéro de maison non détecté - Cible probablement dans un immeuble ou zone non numérotée)";
+        }
       }
     } catch (e) {
       console.error("Erreur reverse géo:", e);
