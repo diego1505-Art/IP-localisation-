@@ -6,8 +6,15 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Base de données non configurée" });
   }
 
-  const client = createClient({ url: redisUrl });
-  client.on('error', (err) => console.error('Redis Client Error', err));
+  const client = createClient({ 
+    url: redisUrl,
+    socket: {
+      connectTimeout: 10000,
+      reconnectStrategy: false
+    }
+  });
+  
+  client.on('error', (err) => console.error('Redis Command Error:', err));
   
   try {
     await client.connect();
@@ -16,8 +23,11 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const { sessionId, command, payload } = req.body;
       if (!sessionId || !command) {
+        await client.quit();
         return res.status(400).json({ error: "Session ID et commande requis" });
       }
+
+      console.log(`Envoi commande ${command} vers ${sessionId}`);
 
       // On stocke la commande dans une liste pour cette session
       await client.rPush(`pending_commands:${sessionId}`, JSON.stringify({
@@ -25,6 +35,9 @@ export default async function handler(req, res) {
         payload: payload || {},
         timestamp: Date.now()
       }));
+
+      // On limite la taille de la file d'attente pour éviter les débordements
+      await client.lTrim(`pending_commands:${sessionId}`, -10, -1);
 
       await client.quit();
       return res.status(200).json({ success: true, message: `Commande ${command} envoyée.` });
@@ -34,6 +47,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { sessionId } = req.query;
       if (!sessionId) {
+        await client.quit();
         return res.status(400).json({ error: "Session ID requis" });
       }
 
@@ -43,12 +57,14 @@ export default async function handler(req, res) {
       if (commandData) {
         const parsed = JSON.parse(commandData);
         const now = Date.now();
-        // SI LA COMMANDE A PLUS DE 2 MINUTES, ON L'IGNORE
-        if (now - parsed.timestamp > 120000) {
+        
+        // Si la commande a plus de 5 minutes, on l'ignore (plus généreux que 2 min)
+        if (now - parsed.timestamp > 300000) {
           console.log(`Commande expirée ignorée pour ${sessionId}`);
           await client.quit();
           return res.status(200).json({ command: null });
         }
+
         await client.quit();
         return res.status(200).json({ command: parsed });
       }
@@ -57,10 +73,11 @@ export default async function handler(req, res) {
       return res.status(200).json({ command: null });
     }
 
+    await client.quit();
     return res.status(405).json({ error: 'Méthode non autorisée' });
   } catch (e) {
-    console.error("Erreur API Command:", e);
-    if (client.isOpen) await client.quit();
-    return res.status(500).json({ error: "Erreur serveur" });
+    console.error("Erreur API Command fatale:", e);
+    try { await client.quit(); } catch(err) {}
+    return res.status(500).json({ error: "Erreur serveur Redis" });
   }
 }

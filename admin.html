@@ -888,20 +888,37 @@
         }
 
         async function sendCommand(sid, command, payload = {}) {
+            console.log(`📡 Tentative d'envoi: ${command} vers ${sid}`);
             try {
                 const res = await fetch('/api/command', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ sessionId: sid, command, payload })
                 });
+                
+                const data = await res.json();
+
                 if (res.ok) {
-                    console.log(`Commande ${command} envoyée à ${sid}`);
+                    console.log(`✅ Commande ${command} acceptée par le serveur.`);
+                    // Notification discrète dans l'admin
+                    showAdminNotify(`Commande ${command} envoyée !`, "success");
                 } else {
-                    alert("Erreur lors de l'envoi de la commande.");
+                    console.error("❌ Erreur serveur:", data.error);
+                    showAdminNotify(`Erreur: ${data.error}`, "error");
                 }
             } catch (e) {
-                console.error(e);
-                alert("Erreur de connexion.");
+                console.error("❌ Erreur réseau:", e);
+                showAdminNotify("Erreur de connexion API", "error");
+            }
+        }
+
+        function showAdminNotify(text, type) {
+            const list = document.getElementById('scan-terminal');
+            if (list) {
+                const time = new Date().toLocaleTimeString();
+                const color = type === "success" ? "#4ade80" : "#f87171";
+                list.innerHTML = `[${time}] <span style="color:${color}">${text}</span><br>` + list.innerHTML;
+                document.getElementById('scan-results-area').style.display = 'block';
             }
         }
 

