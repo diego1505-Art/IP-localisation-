@@ -78,7 +78,9 @@ export default async function handler(req, res) {
         fullAddress = parts.join(', ');
         
         if (!houseNumber) {
-            fullAddress += " (Numéro de maison non détecté - Cible probablement dans un immeuble ou zone non numérotée)";
+            fullAddress += " (Numéro de maison non détecté - Cela dépend de la précision de votre GPS et si la maison est répertoriée sur OpenStreetMap)";
+        } else {
+            fullAddress = `🏠 NUMÉRO DÉTECTÉ : ${fullAddress}`;
         }
       }
     } catch (e) {

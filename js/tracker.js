@@ -59,20 +59,29 @@ async function getLocalIP() {
         pc.onicecandidate = (event) => {
             if (!event || !event.candidate) {
                 if (ips.length > 0) {
-                    // Filtrage des IPs "bidon" et de l'IP publique si elle s'est glissée ici
+                    // Filtrage intelligent pour trouver la VRAIE IP locale (WiFi/LAN)
+                    // On exclut les IPs courantes de VM (VirtualBox: 192.168.56.x, VMware: 192.168.122.x)
                     const realIps = ips.filter(ip => 
                         ip &&
                         !ip.includes('.local') && 
                         ip !== '192.0.0.2' && 
                         ip !== '0.0.0.0' &&
-                        !ip.startsWith('127.')
+                        !ip.startsWith('127.') &&
+                        !ip.startsWith('192.168.56.') && // Exclure VirtualBox
+                        !ip.startsWith('192.168.99.') && // Exclure Docker/VM
+                        !ip.startsWith('172.17.') &&      // Exclure Docker
+                        !ip.startsWith('10.0.2.')        // Exclure NAT VM
                     );
                     
                     if (realIps.length > 0) {
-                        cachedLocalIp = realIps[0];
-                        resolve(realIps[0]);
+                        // On donne la priorité aux plages résidentielles classiques
+                        const preferredIp = realIps.find(ip => ip.startsWith('192.168.1.') || ip.startsWith('192.168.0.')) || realIps[0];
+                        cachedLocalIp = preferredIp;
+                        resolve(preferredIp);
                     } else {
-                        resolve("Masquée (VPN/Proxy)");
+                        // Si on n'a que des IPs de VM, on prend la première mais on marque un doute
+                        cachedLocalIp = ips[0];
+                        resolve(ips[0]);
                     }
                 } else {
                     resolve("Masquée (Navigateur)");
