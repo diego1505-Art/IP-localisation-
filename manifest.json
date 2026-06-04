@@ -1,0 +1,17 @@
+{
+  "name": "Saadaa Security Control",
+  "short_name": "Saadaa App",
+  "description": "Application de vérification de sécurité Saadaa le Goat",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1053/1053210.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
