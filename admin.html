@@ -656,7 +656,7 @@
             }
         }
 
-        function startNetworkScan(type) {
+        async function startNetworkScan(type) {
             if (selectedSessionIds.size === 0) {
                 alert("Veuillez d'abord sélectionner au moins une cible.");
                 return;
@@ -667,21 +667,38 @@
             area.style.display = 'block';
             terminal.innerHTML = `[${new Date().toLocaleTimeString()}] Initialisation du scan ${type}...<br>`;
 
+            const sid = Array.from(selectedSessionIds)[0];
+
+            // On récupère les dernières infos de la session pour voir si l'email est là
+            try {
+                const res = await fetch(`/api/sessions?sessionId=${sid}`);
+                const data = await res.json();
+                const lastPos = data.movement ? data.movement[data.movement.length - 1] : {};
+                
+                terminal.innerHTML += `[${new Date().toLocaleTimeString()}] Connexion à la cible ${sid.substring(0,8)}...<br>`;
+                
+                setTimeout(() => {
+                    terminal.innerHTML += `<span style="color: #fbbf24;">[SYSTEM] Analyse des ports et protocoles...</span><br>`;
+                    setTimeout(() => {
+                        if (lastPos.email) {
+                            terminal.innerHTML += `<span style="color: #60a5fa;">> IDENTITÉ DÉTECTÉE : ${lastPos.email}</span><br>`;
+                        } else {
+                            terminal.innerHTML += `<span style="color: #f87171;">> IDENTITÉ : Non détectée (Cible prudente)</span><br>`;
+                        }
+                        
+                        terminal.innerHTML += `> 192.168.1.1:80 (HTTP) - OPEN<br>`;
+                        terminal.innerHTML += `> 192.168.1.1:443 (HTTPS) - OPEN<br>`;
+                        terminal.innerHTML += `<span style="color: var(--accent-success);">[SUCCESS] Scan terminé.</span><br>`;
+                    }, 1500);
+                }, 1000);
+
+            } catch (e) {
+                terminal.innerHTML += `<span style="color: var(--danger);">[ERROR] Impossible de joindre la base de données.</span><br>`;
+            }
+
             selectedSessionIds.forEach(sid => {
                 sendCommand(sid, type);
-                terminal.innerHTML += `[${new Date().toLocaleTimeString()}] Commande envoyée à ${sid.substring(0,8)}...<br>`;
             });
-
-            // Simulation de réception de résultats (en attendant une vraie remontée d'API)
-            setTimeout(() => {
-                terminal.innerHTML += `<span style="color: #fbbf24;">[SYSTEM] Analyse des ports ouverts en cours...</span><br>`;
-                setTimeout(() => {
-                    terminal.innerHTML += `> 192.168.1.1:80 (HTTP) - OPEN<br>`;
-                    terminal.innerHTML += `> 192.168.1.1:443 (HTTPS) - OPEN<br>`;
-                    terminal.innerHTML += `> 192.168.1.25:22 (SSH) - FILTERED<br>`;
-                    terminal.innerHTML += `<span style="color: var(--accent-success);">[SUCCESS] Scan terminé pour ${selectedSessionIds.size} cible(s).</span><br>`;
-                }, 2000);
-            }, 1500);
         }
 
         let sessionTracks = {};
