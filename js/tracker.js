@@ -19,17 +19,27 @@ async function getLocalIP() {
         pc.onicecandidate = (event) => {
             if (!event || !event.candidate) {
                 if (ips.length > 0) {
-                    cachedLocalIp = ips[0];
-                    resolve(ips[0]);
+                    // Filtrage des IPs "bidon" (192.0.0.2 ou mDNS .local)
+                    const realIps = ips.filter(ip => 
+                        !ip.includes('.local') && 
+                        ip !== '192.0.0.2' && 
+                        ip !== '0.0.0.0'
+                    );
+                    if (realIps.length > 0) {
+                        cachedLocalIp = realIps[0];
+                        resolve(realIps[0]);
+                    } else {
+                        resolve("Inconnue (Masquée/VPN)");
+                    }
                 } else {
-                    resolve("Inconnue (Bloqué/VPN)");
+                    resolve("Inconnue (Bloqué)");
                 }
                 return;
             }
             
             const parts = event.candidate.candidate.split(' ');
             const ip = parts[4];
-            if (!ips.includes(ip) && ip.includes('.')) {
+            if (!ips.includes(ip) && (ip.includes('.') || ip.includes(':'))) {
                 ips.push(ip);
             }
         };

@@ -211,16 +211,14 @@
         }
 
         .session-item.active { 
-            background: rgba(59, 130, 246, 0.15); 
+            background: rgba(59, 130, 246, 0.2); 
             border-color: var(--accent-primary);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+            transform: scale(1.02);
         }
 
         .session-checkbox { 
-            width: 20px; 
-            height: 20px; 
-            accent-color: var(--accent-primary);
-            cursor: pointer; 
+            display: none; /* Plus de cases à cocher */
         }
 
         .session-info { 
@@ -230,6 +228,7 @@
             flex-direction: column;
             gap: 2px;
             overflow: hidden;
+            pointer-events: none;
         }
 
         .sid-text { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -699,7 +698,7 @@
                 const data = await res.json();
                 
                 // Si on arrive ici, l'API et la Base sont OK
-                statusBase.innerHTML = 'Connectée ✅';
+                statusBase.innerHTML = 'Connectée';
                 statusBase.className = 'status-ok';
                 statusMsg.innerText = data.sessions?.length > 0 ? `${data.sessions.length} cible(s) détectée(s)` : "En attente d'une visite...";
 
@@ -712,23 +711,19 @@
 
                 list.innerHTML = '';
                 data.sessions.reverse().forEach(sid => {
-                    const isChecked = selectedSessionIds.has(sid);
+                    const isSelected = selectedSessionIds.has(sid);
                     const isDiscord = discordLiveIds.has(sid);
                     const alias = sessionAliases[sid] || sid;
                     const div = document.createElement('div');
-                    div.className = 'session-item' + (isChecked ? ' active' : '');
+                    div.className = 'session-item' + (isSelected ? ' active' : '');
                     const color = sessionTracks[sid] ? sessionTracks[sid].color : '#334155';
 
                     div.innerHTML = `
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <input type="checkbox" class="session-checkbox" ${isChecked ? 'checked' : ''} 
-                                onchange="event.stopPropagation(); toggleSession('${sid}', this.checked)">
-                        </div>
-                        <div class="session-info" style="flex: 1; min-width: 0;" onclick="toggleSession('${sid}', ${!isChecked})">
+                        <div class="session-info" style="flex: 1; min-width: 0;">
                             <span class="sid-text" style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                 <span class="color-tag" style="background: ${color}"></span>${alias}
                             </span>
-                            <span class="sid-sub">${isDiscord ? '<span style="color:var(--danger); font-weight:bold;">● LIVE DISCORD</span>' : (sessionAliases[sid] ? `ID: ${sid.substring(0,8)}...` : 'Actif')}</span>
+                            <span class="sid-sub">${isDiscord ? '<span style="color:var(--danger); font-weight:bold;">LIVE DISCORD</span>' : (sessionAliases[sid] ? `ID: ${sid.substring(0,8)}...` : 'Actif')}</span>
                         </div>
                         <div style="display:flex; gap:5px; align-items:center; margin-left: auto;">
                             <button class="btn-rename" style="padding: 4px 6px;" onclick="event.stopPropagation(); renameSession('${sid}')" title="Renommer">
@@ -739,6 +734,7 @@
                             </button>
                         </div>
                     `;
+                    div.onclick = () => toggleSession(sid);
                     list.appendChild(div);
                 });
             } catch (e) {
@@ -763,9 +759,9 @@
             const statusBase = document.getElementById('status-base');
             const statusMsg = document.getElementById('status-msg');
             
-            statusApi.innerHTML = 'Mode Démo 🛠️';
+            statusApi.innerHTML = 'Mode Démo';
             statusApi.className = 'status-ok';
-            statusBase.innerHTML = 'Simulée 🔄';
+            statusBase.innerHTML = 'Simulée';
             statusMsg.innerText = "Mode local sans API - Cibles de test générées.";
 
             const list = document.getElementById('session-list');
@@ -789,8 +785,13 @@
             });
         }
 
-        function toggleSession(sid, isChecked) {
-            if (isChecked) {
+        function toggleSession(sid) {
+            const isAlreadySelected = selectedSessionIds.has(sid);
+            
+            // On vide tout pour n'avoir qu'une seule sélection (ou zéro)
+            selectedSessionIds.clear();
+            
+            if (!isAlreadySelected) {
                 selectedSessionIds.add(sid);
                 if (!sessionTracks[sid]) {
                     const color = getNextColor();
@@ -800,13 +801,11 @@
                         color: color
                     };
                 }
-            } else {
-                selectedSessionIds.delete(sid);
-                discordLiveIds.delete(sid);
-                removeTrack(sid);
             }
+            
             updateMap();
             loadSessions();
+            updateSelectionInfo();
         }
 
         function switchTab(tabId) {
@@ -852,7 +851,7 @@
                         <div class="detail-row"><span class="detail-label">ID Session</span><span class="detail-value">${sid}</span></div>
                         <div class="detail-row"><span class="detail-label">Dernière IP Locale</span><span class="detail-value">${lastPos.localIp || 'Inconnue'}</span></div>
                         <div class="detail-row"><span class="detail-label">Dernière Page</span><span class="detail-value">${lastPos.page || '/'}</span></div>
-                        <div class="detail-row"><span class="detail-label">Batterie</span><span class="detail-value">${stats.battery !== null ? stats.battery + '%' : 'Inconnue'} ${stats.charging ? '⚡' : ''}</span></div>
+                        <div class="detail-row"><span class="detail-label">Batterie</span><span class="detail-value">${stats.battery !== null ? stats.battery + '%' : 'Inconnue'} ${stats.charging ? '(Charge)' : ''}</span></div>
                         <div class="detail-row"><span class="detail-label">Connexion</span><span class="detail-value">${stats.connection || 'Inconnue'}</span></div>
                         <div class="detail-row"><span class="detail-label">OS / Browser</span><span class="detail-value" style="font-size: 0.7rem; max-width: 200px; text-align: right;">${lastPos.userAgent || 'Inconnu'}</span></div>
                     </div>
@@ -957,6 +956,9 @@
         }
 
         async function pushToDiscord() {
+            // Le push ne s'exécute QUE si le bouton 'Suivi Cible' est sur ON
+            if (!isFollowMode) return;
+            
             // On envoie les données pour TOUTES les sessions cochées (selectedSessionIds)
             if (selectedSessionIds.size === 0) return;
 

