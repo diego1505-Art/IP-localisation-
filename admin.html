@@ -481,6 +481,7 @@
         <div id="tab-settings" class="sidebar-content">
             <div class="action-card">
                 <h4>Affichage</h4>
+                <button class="btn-refresh btn-action-full" style="background: var(--accent-primary); color: white;" onclick="if(selectedSessionIds.size === 1) centerOnCible(Array.from(selectedSessionIds)[0]); else alert('Sélectionnez une seule cible pour la centrer.');">Centrer sur la cible 🎯</button>
                 <button id="btn-satellite" class="btn-clear btn-action-full" onclick="toggleSatellite()">Vue Satellite : OFF</button>
                 <button id="btn-follow" class="btn-clear btn-action-full" onclick="toggleFollow()">Suivi Cible : OFF</button>
                 <button class="btn-clear btn-action-full" onclick="clearAll()">Vider la carte</button>
@@ -736,6 +737,9 @@
                             <span class="sid-sub">${isDiscord ? '<span style="color:var(--danger); font-weight:bold;">LIVE DISCORD</span>' : (sessionAliases[sid] ? `ID: ${sid.substring(0,8)}...` : 'Actif')}</span>
                         </div>
                         <div style="display:flex; gap:5px; align-items:center; margin-left: auto; pointer-events: auto;">
+                            <button class="btn-refresh" style="padding: 4px 6px;" onclick="event.stopPropagation(); centerOnCible('${sid}')" title="Centrer">
+                                🎯
+                            </button>
                             <button class="btn-rename" style="padding: 4px 6px;" onclick="event.stopPropagation(); renameSession('${sid}')" title="Renommer">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                             </button>
