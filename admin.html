@@ -583,7 +583,8 @@
                     if (sessionTracks[sid]) {
                         const path = sessionTracks[sid].polyline.getLatLngs();
                         if (path.length > 0) {
-                            map.setView(path[path.length - 1], 22);
+                            const zoomLevel = isSatellite ? 21 : 18;
+                            map.setView(path[path.length - 1], zoomLevel);
                         }
                     }
                 }
@@ -943,7 +944,8 @@
             if (sessionTracks[sid]) {
                 const path = sessionTracks[sid].polyline.getLatLngs();
                 if (path.length > 0) {
-                    map.setView(path[path.length - 1], 22);
+                    const zoomLevel = isSatellite ? 21 : 18;
+                    map.setView(path[path.length - 1], zoomLevel);
                     closeModal();
                 }
             }
@@ -1135,7 +1137,8 @@
 
                     // Auto-centrage si mode activé et session unique sélectionnée
                     if (isFollowMode && selectedSessionIds.size === 1) {
-                        map.setView([lastPos.lat, lastPos.lon], 22);
+                        const zoomLevel = isSatellite ? 21 : 18;
+                        map.setView([lastPos.lat, lastPos.lon], zoomLevel);
                     }
 
                 } catch (e) { console.error(e); }
