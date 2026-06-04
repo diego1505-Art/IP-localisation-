@@ -718,19 +718,25 @@
                     const isDiscord = discordLiveIds.has(sid);
                     const alias = sessionAliases[sid] || sid;
                     const div = document.createElement('div');
-                    // On force l'ID pour le style CSS
+                    
                     div.id = `session-${sid}`;
                     div.className = 'session-item' + (isSelected ? ' active' : '');
                     const color = sessionTracks[sid] ? sessionTracks[sid].color : '#334155';
 
+                    // Le clic est mis sur tout le div pour être sûr que ça réagisse
+                    div.onclick = () => {
+                        console.log("Clic sur session:", sid);
+                        toggleSession(sid);
+                    };
+
                     div.innerHTML = `
-                        <div class="session-info" style="flex: 1; min-width: 0;" onclick="toggleSession('${sid}')">
+                        <div class="session-info" style="flex: 1; min-width: 0; pointer-events: none;">
                             <span class="sid-text" style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                 <span class="color-tag" style="background: ${color}"></span>${alias}
                             </span>
                             <span class="sid-sub">${isDiscord ? '<span style="color:var(--danger); font-weight:bold;">LIVE DISCORD</span>' : (sessionAliases[sid] ? `ID: ${sid.substring(0,8)}...` : 'Actif')}</span>
                         </div>
-                        <div style="display:flex; gap:5px; align-items:center; margin-left: auto;">
+                        <div style="display:flex; gap:5px; align-items:center; margin-left: auto; pointer-events: auto;">
                             <button class="btn-rename" style="padding: 4px 6px;" onclick="event.stopPropagation(); renameSession('${sid}')" title="Renommer">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                             </button>
@@ -739,7 +745,6 @@
                             </button>
                         </div>
                     `;
-                    // On retire div.onclick qui entrait en conflit avec l'onclick interne
                     list.appendChild(div);
                 });
             } catch (e) {
