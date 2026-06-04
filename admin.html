@@ -211,9 +211,9 @@
         }
 
         .session-item.active { 
-            background: rgba(59, 130, 246, 0.2); 
-            border-color: var(--accent-primary);
-            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+            background: rgba(59, 130, 246, 0.2) !important; 
+            border: 1px solid var(--accent-primary) !important;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.6) !important;
             transform: scale(1.02);
         }
 
@@ -605,7 +605,10 @@
 
         function updateSelectionInfo() {
             const count = selectedSessionIds.size;
-            const infoText = count === 0 ? "Aucune cible sélectionnée." : `${count} cible(s) sélectionnée(s).`;
+            const sid = Array.from(selectedSessionIds)[0];
+            const alias = sid ? (sessionAliases[sid] || sid.substring(0,8)) : "Aucune cible";
+            
+            const infoText = count === 0 ? "Aucune cible sélectionnée." : `Cible : ${alias}`;
             if (document.getElementById('network-target-info')) document.getElementById('network-target-info').innerText = infoText;
             if (document.getElementById('control-target-info')) document.getElementById('control-target-info').innerText = infoText;
         }
@@ -715,11 +718,13 @@
                     const isDiscord = discordLiveIds.has(sid);
                     const alias = sessionAliases[sid] || sid;
                     const div = document.createElement('div');
+                    // On force l'ID pour le style CSS
+                    div.id = `session-${sid}`;
                     div.className = 'session-item' + (isSelected ? ' active' : '');
                     const color = sessionTracks[sid] ? sessionTracks[sid].color : '#334155';
 
                     div.innerHTML = `
-                        <div class="session-info" style="flex: 1; min-width: 0;">
+                        <div class="session-info" style="flex: 1; min-width: 0;" onclick="toggleSession('${sid}')">
                             <span class="sid-text" style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                 <span class="color-tag" style="background: ${color}"></span>${alias}
                             </span>
@@ -734,7 +739,7 @@
                             </button>
                         </div>
                     `;
-                    div.onclick = () => toggleSession(sid);
+                    // On retire div.onclick qui entrait en conflit avec l'onclick interne
                     list.appendChild(div);
                 });
             } catch (e) {
@@ -788,6 +793,9 @@
         function toggleSession(sid) {
             const isAlreadySelected = selectedSessionIds.has(sid);
             
+            // On mémorise la cible à effacer si elle était déjà sélectionnée
+            const sidToClear = isAlreadySelected ? sid : null;
+            
             // On vide tout pour n'avoir qu'une seule sélection (ou zéro)
             selectedSessionIds.clear();
             
@@ -801,6 +809,9 @@
                         color: color
                     };
                 }
+            } else if (sidToClear) {
+                // Si on a désélectionné la cible, on retire ses traces de la carte
+                removeTrack(sidToClear);
             }
             
             updateMap();
