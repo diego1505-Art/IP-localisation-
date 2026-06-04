@@ -56,19 +56,23 @@ export default async function handler(req, res) {
   // Si on a le GPS, on essaie de trouver l'adresse complète (Reverse Geocoding)
   if (hasGps) {
     try {
-      const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${preciseLocation.lat}&lon=${preciseLocation.lon}&addressdetails=1`, {
+      // On demande plus de détails à Nominatim pour une précision maximale
+      const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${preciseLocation.lat}&lon=${preciseLocation.lon}&addressdetails=1&zoom=18`, {
         headers: { 'User-Agent': 'SaadaaTracker/1.0' }
       });
       const revData = await revRes.json();
       if (revData && revData.address) {
         const addr = revData.address;
-        const city = addr.city || addr.town || addr.village || addr.municipality || addr.suburb;
-        const road = addr.road || addr.pedestrian || addr.street;
+        const city = addr.city || addr.town || addr.village || addr.municipality || addr.suburb || addr.neighbourhood;
+        const road = addr.road || addr.pedestrian || addr.street || addr.square;
         const houseNumber = addr.house_number || "";
         const postcode = addr.postcode || "";
+        const state = addr.state || addr.region || "";
         
-        displayLocation = `📍 ${city || 'Ville inconnue'} (${addr.state || addr.county || ''}), ${addr.country}`;
-        fullAddress = `${houseNumber} ${road}, ${postcode} ${city}, ${addr.country}`.trim().replace(/^,/, '');
+        displayLocation = `📍 ${city || 'Ville inconnue'} (${state}), ${addr.country}`;
+        // Construction d'une adresse ultra précise
+        const parts = [houseNumber, road, postcode, city, state, addr.country].filter(p => !!p);
+        fullAddress = parts.join(', ');
       }
     } catch (e) {
       console.error("Erreur reverse géo:", e);
