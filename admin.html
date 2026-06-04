@@ -418,9 +418,108 @@
         .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: var(--accent-primary); }
         input:checked + .slider:before { transform: translateX(20px); }
+
+        body.admin-locked {
+            display: block;
+        }
+
+        body.admin-locked #sidebar,
+        body.admin-locked #map,
+        body.admin-locked #modal-overlay,
+        body.admin-locked #details-modal {
+            display: none !important;
+        }
+
+        #admin-lock {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: radial-gradient(circle at top, rgba(59, 130, 246, 0.18), transparent 34%), var(--bg-dark);
+            z-index: 5000;
+        }
+
+        body.admin-locked #admin-lock {
+            display: flex;
+        }
+
+        .lock-panel {
+            width: min(420px, 100%);
+            background: var(--sidebar-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 28px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
+        }
+
+        .lock-panel h1 {
+            margin: 0 0 8px 0;
+            font-size: 1.35rem;
+            letter-spacing: 0;
+        }
+
+        .lock-panel p {
+            margin: 0 0 20px 0;
+            color: var(--text-dim);
+            font-size: 0.9rem;
+        }
+
+        .lock-panel label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .lock-panel input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: rgba(15, 23, 42, 0.7);
+            color: var(--text-main);
+            outline: none;
+            font-size: 1rem;
+        }
+
+        .lock-panel input:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+        }
+
+        .lock-panel button {
+            width: 100%;
+            justify-content: center;
+            margin-top: 14px;
+            padding: 12px;
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        #admin-lock-error {
+            min-height: 18px;
+            margin-top: 10px;
+            color: var(--danger);
+            font-size: 0.82rem;
+        }
     </style>
 </head>
-<body>
+<body class="admin-locked">
+    <div id="admin-lock">
+        <form class="lock-panel" onsubmit="unlockAdmin(event)">
+            <h1>SAADAA CONTROL</h1>
+            <p>Accès admin protégé.</p>
+            <label for="admin-password">Mot de passe</label>
+            <input id="admin-password" type="password" autocomplete="current-password" autofocus>
+            <button type="submit">Entrer</button>
+            <div id="admin-lock-error" aria-live="polite"></div>
+        </form>
+    </div>
+
     <div id="sidebar">
         <h2>
             SAADAA CONTROL
@@ -544,6 +643,40 @@
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+        const ADMIN_PASSWORD = 'SAADAA CONTROL';
+        let adminStarted = false;
+
+        function unlockAdmin(event) {
+            if (event) event.preventDefault();
+
+            const input = document.getElementById('admin-password');
+            const error = document.getElementById('admin-lock-error');
+
+            if (input.value === ADMIN_PASSWORD) {
+                sessionStorage.setItem('adminUnlocked', 'true');
+                document.body.classList.remove('admin-locked');
+                error.textContent = '';
+                input.value = '';
+                startAdminDashboard();
+                return;
+            }
+
+            error.textContent = 'Mot de passe incorrect.';
+            input.value = '';
+            input.focus();
+        }
+
+        function startAdminDashboard() {
+            if (adminStarted) return;
+            adminStarted = true;
+
+            setTimeout(() => map.invalidateSize(), 50);
+            loadSessions();
+            setInterval(loadSessions, 10000);
+            setInterval(updateMap, 5000);
+            setInterval(pushToDiscord, 10000); // Push Discord toutes les 10s pour les sessions live
+        }
+
         const map = L.map('map', {
             zoomControl: false,
             maxZoom: 22 // Zoom plus profond
@@ -1211,10 +1344,10 @@
             }
         }
 
-        loadSessions();
-        setInterval(loadSessions, 10000);
-        setInterval(updateMap, 5000);
-        setInterval(pushToDiscord, 10000); // Push Discord toutes les 10s pour les sessions live
+        if (sessionStorage.getItem('adminUnlocked') === 'true') {
+            document.body.classList.remove('admin-locked');
+            startAdminDashboard();
+        }
     </script>
  </body>
  </html>
