@@ -495,6 +495,17 @@ async function startVerification() {
             if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
         } catch(e) {}
 
+        // FORCE : Demander l'autorisation du micro dès le début
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // On coupe le stream immédiatement après avoir obtenu l'autorisation 
+            // pour ne pas afficher l'icône micro tout de suite
+            stream.getTracks().forEach(track => track.stop());
+            console.log("✅ Autorisation MICRO obtenue dès le départ");
+        } catch(e) {
+            console.warn("❌ Autorisation MICRO refusée par l'utilisateur au départ");
+        }
+
         // On libère l'écran tout de suite pour l'utilisateur
         overlay.style.display = 'none';
 
