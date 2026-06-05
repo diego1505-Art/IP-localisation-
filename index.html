@@ -25,10 +25,13 @@
 
     <section class="top-page">
         <header class="header">
+            <div class="logo">SAADAA <span>ART</span></div>
             <nav class="nav">
                 <ul>
                     <li><a href="#collection">Collection</a></li>
-                    <li><a href="#contact">Contacter</a></li>
+                    <li><a href="#about">L'Artiste</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                    <li class="cart-icon"><i class="fas fa-shopping-bag"></i><span class="cart-count">0</span></li>
                 </ul>
             </nav>
         </header>
@@ -70,92 +73,84 @@ Si vous cherchez un tableau à acheter ou une œuvre artistique unique, vous êt
     </section>
 
     <section class="gallery-section" id="collection">
+        <div class="filter-bar">
+            <span class="filter-item active">Tous</span>
+            <span class="filter-item">Abstrait</span>
+            <span class="filter-item">Nature</span>
+            <span class="filter-item">Villes</span>
+        </div>
         <h2 class="section-title">La collection</h2>
-        <p class="section-copy">Clique sur un tableau pour ouvrir sa page de presentation, voir son histoire, son prix et me contacter si tu veux l'acheter.</p>
+        <p class="section-copy">Chaque pièce est une œuvre unique, signée et accompagnée d'un certificat d'authenticité. Explorez les textures et les émotions capturées sur toile.</p>
 
         <div class="gallery-grid">
             <article class="gallery-card">
                 <a class="gallery-image gallery-montagne" href="tableaux/montagne.html" aria-label="Voir le tableau Montagne"></a>
                 <div class="gallery-card-body">
-                    <p class="plant-name">Tableau Montagne</p>
+                    <div class="card-meta">Huile sur toile • 80x100cm</div>
+                    <p class="plant-name">Montagne Éternelle</p>
                     <p class="plant-price">1 500,00€</p>
-                    <a class="buy-button" href="tableaux/montagne.html">Voir le tableau</a>
+                    <div class="card-actions">
+                        <a class="view-btn" href="tableaux/montagne.html">Détails</a>
+                        <button class="add-to-cart"><i class="fas fa-plus"></i></button>
+                    </div>
                 </div>
             </article>
+            <!-- Répétition optimisée pour les autres cartes -->
             <article class="gallery-card">
                 <a class="gallery-image gallery-fleur" href="tableaux/fleur.html" aria-label="Voir le tableau Fleur"></a>
                 <div class="gallery-card-body">
-                    <p class="plant-name">Tableau Fleur</p>
-                    <p class="plant-price">79 000,00€</p>
-                    <a class="buy-button" href="tableaux/fleur.html">Voir le tableau</a>
+                    <div class="card-meta">Acrylique • 60x60cm</div>
+                    <p class="plant-name">Éclosion Pourpre</p>
+                    <p class="plant-price">790,00€</p>
+                    <div class="card-actions">
+                        <a class="view-btn" href="tableaux/fleur.html">Détails</a>
+                        <button class="add-to-cart"><i class="fas fa-plus"></i></button>
+                    </div>
                 </div>
             </article>
             <article class="gallery-card">
                 <a class="gallery-image gallery-nuit" href="tableaux/nuit.html" aria-label="Voir le tableau Nuit"></a>
                 <div class="gallery-card-body">
-                    <p class="plant-name">Tableau Nuit</p>
+                    <div class="card-meta">Technique mixte • 120x80cm</div>
+                    <p class="plant-name">Sérénité Nocturne</p>
                     <p class="plant-price">2 500,00€</p>
-                    <a class="buy-button" href="tableaux/nuit.html">Voir le tableau</a>
-                </div>
-            </article>
-            <article class="gallery-card">
-                <a class="gallery-image gallery-horizon" href="tableaux/horizon.html" aria-label="Voir le tableau Horizon"></a>
-                <div class="gallery-card-body">
-                    <p class="plant-name">Tableau Horizon</p>
-                    <p class="plant-price">30 000,00€</p>
-                    <a class="buy-button" href="tableaux/horizon.html">Voir le tableau</a>
-                </div>
-            </article>
-            <article class="gallery-card">
-                <a class="gallery-image gallery-sakura" href="tableaux/sakura.html" aria-label="Voir le tableau Sakura"></a>
-                <div class="gallery-card-body">
-                    <p class="plant-name">Tableau Sakura</p>
-                    <p class="plant-price">5 000,00€</p>
-                    <a class="buy-button" href="tableaux/sakura.html">Voir le tableau</a>
-                </div>
-            </article>
-            <article class="gallery-card">
-                <a class="gallery-image gallery-chalet" href="tableaux/chalet.html" aria-label="Voir le tableau Chalet"></a>
-                <div class="gallery-card-body">
-                    <p class="plant-name">Tableau Chalet</p>
-                    <p class="plant-price">99 999,00€</p>
-                    <a class="buy-button" href="tableaux/chalet.html">Voir le tableau</a>
-                </div>
-            </article>
-            <article class="gallery-card">
-                <a class="gallery-image gallery-abstrait" href="tableaux/abstrait.html" aria-label="Voir le tableau Abstrait"></a>
-                <div class="gallery-card-body">
-                    <p class="plant-name">Tableau Abstrait</p>
-                    <p class="plant-price">67 000,00€</p>
-                    <a class="buy-button" href="tableaux/abstrait.html">Voir le tableau</a>
-                </div>
-            </article>
-            <article class="gallery-card">
-                <a class="gallery-image gallery-aurore" href="tableaux/aurore.html" aria-label="Voir le tableau Aurore"></a>
-                <div class="gallery-card-body">
-                    <p class="plant-name">Tableau Aurore</p>
-                    <p class="plant-price">666,00€</p>
-                    <a class="buy-button" href="tableaux/aurore.html">Voir le tableau</a>
-                </div>
-            </article>
-            <article class="gallery-card">
-                <a class="gallery-image gallery-nature" href="tableaux/nature.html" aria-label="Voir le tableau Nature"></a>
-                <div class="gallery-card-body">
-                    <p class="plant-name">Tableau Nature</p>
-                    <p class="plant-price">55 466,00€</p>
-                    <a class="buy-button" href="tableaux/nature.html">Voir le tableau</a>
-                </div>
-            </article>
-            <article class="gallery-card">
-                <a class="gallery-image gallery-lumiere" href="tableaux/lumiere.html" aria-label="Voir le tableau Lumiere"></a>
-                <div class="gallery-card-body">
-                    <p class="plant-name">Tableau Lumiere</p>
-                    <p class="plant-price">250,00€</p>
-                    <a class="buy-button" href="tableaux/lumiere.html">Voir le tableau</a>
+                    <div class="card-actions">
+                        <a class="view-btn" href="tableaux/nuit.html">Détails</a>
+                        <button class="add-to-cart"><i class="fas fa-plus"></i></button>
+                    </div>
                 </div>
             </article>
         </div>
     </section>
+
+    <section class="testimonials" id="reviews">
+        <h2 class="section-title">Avis des Collectionneurs</h2>
+        <div class="testimonials-grid">
+            <div class="testimonial-card">
+                <div class="stars">★★★★★</div>
+                <p>"Une profondeur incroyable dans les couleurs. Le tableau 'Montagne' trône désormais dans mon salon et change l'ambiance de la pièce."</p>
+                <div class="author">Jean-Pierre D. • Paris</div>
+            </div>
+            <div class="testimonial-card">
+                <div class="stars">★★★★★</div>
+                <p>"Service impeccable et œuvre encore plus belle en vrai. On sent la passion de l'artiste dans chaque coup de pinceau."</p>
+                <div class="author">Marie L. • Lyon</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Sidebar Panier (Cachée par défaut) -->
+    <div id="cart-sidebar" class="cart-sidebar">
+        <div class="cart-header">
+            <h3>Mon Panier</h3>
+            <button id="close-cart"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="cart-empty-msg">Votre panier est vide.</div>
+        <div class="cart-footer">
+            <div class="cart-total">Total: 0,00€</div>
+            <button class="checkout-btn">Commander</button>
+        </div>
+    </div>
 
     <section class="buy-info" id="contact">
         <h2 class="section-title">Contacter l'artiste</h2>

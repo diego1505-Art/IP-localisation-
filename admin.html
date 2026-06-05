@@ -7,14 +7,17 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         :root {
-            --bg-dark: #0f172a;
-            --sidebar-bg: #1e293b;
-            --accent-primary: #3b82f6;
-            --accent-success: #10b981;
+            --bg-dark: #020617;
+            --sidebar-bg: #0f172a;
+            --card-bg: #1e293b;
+            --accent-primary: #38bdf8;
+            --accent-success: #22c55e;
+            --accent-warning: #f59e0b;
             --text-main: #f8fafc;
             --text-dim: #94a3b8;
             --border-color: #334155;
             --danger: #ef4444;
+            --gold: #fbbf24;
         }
 
         body { 
@@ -28,176 +31,162 @@
         }
 
         #sidebar { 
-            width: 380px; 
+            width: 420px; 
             background: var(--sidebar-bg); 
             border-right: 1px solid var(--border-color); 
             display: flex; 
             flex-direction: column; 
-            box-shadow: 4px 0 15px rgba(0,0,0,0.3);
+            box-shadow: 10px 0 30px rgba(0,0,0,0.5);
             z-index: 1001;
         }
 
-        /* Menu Principal Sidebar */
-        .sidebar-nav {
-            display: flex;
-            background: rgba(15, 23, 42, 0.5);
+        .admin-header {
+            padding: 20px;
+            background: rgba(15, 23, 42, 0.8);
             border-bottom: 1px solid var(--border-color);
-        }
-
-        .nav-item {
-            flex: 1;
-            padding: 15px 5px;
-            text-align: center;
-            cursor: pointer;
-            font-size: 0.75rem;
-            color: var(--text-dim);
-            transition: all 0.2s;
-            border-bottom: 2px solid transparent;
             display: flex;
-            flex-direction: column;
             align-items: center;
-            gap: 5px;
+            justify-content: space-between;
         }
 
-        .nav-item i { font-size: 1.2rem; }
-        .nav-item:hover { background: rgba(255,255,255,0.05); color: white; }
-        .nav-item.active { 
-            color: var(--accent-primary); 
-            border-bottom-color: var(--accent-primary);
-            background: rgba(59, 130, 246, 0.05);
+        .admin-title {
+            font-family: 'Abril Fatface', cursive;
+            font-size: 20px;
+            color: var(--gold);
+            letter-spacing: 1px;
         }
-        .nav-item.locked {
-            color: #64748b;
-            cursor: not-allowed;
-        }
-        .nav-item.locked::after {
-            content: "Bloqué";
-            font-size: 0.62rem;
-            color: var(--danger);
+
+        .status-badge {
+            padding: 4px 10px;
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--accent-success);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            border-radius: 20px;
+            font-size: 11px;
             font-weight: 700;
+            text-transform: uppercase;
         }
 
-        .sidebar-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 15px;
-            display: none;
-        }
-
-        .sidebar-content.active { display: block; }
-
-        #map { flex: 1; z-index: 1; }
-
-        h2 { 
-            padding: 20px; 
-            margin: 0; 
-            background: rgba(15, 23, 42, 0.5); 
-            font-size: 1.2rem; 
-            font-weight: 600;
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            border-bottom: 1px solid var(--border-color);
-            letter-spacing: -0.025em;
-        }
-
-        .btn-group { display: flex; gap: 8px; }
-
-        button {
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .btn-refresh { background: var(--accent-primary); color: white; }
-        .btn-refresh:hover { background: #2563eb; transform: translateY(-1px); }
-        .btn-refresh.active-discord { 
-            background: var(--danger); 
-            animation: pulse-red 2s infinite;
-        }
-
-        @keyframes pulse-red {
-            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-
-        .live-indicator {
-            position: absolute;
-            top: -15px;
-            right: -15px;
-            background: var(--danger);
-            color: white;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: bold;
-            animation: blink 1s infinite;
-            z-index: 1000;
-        }
-
-        @keyframes blink {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        .btn-clear { background: #334155; color: white; }
-        .btn-clear:hover { background: #475569; }
-
-        .btn-delete {
-            background: rgba(239, 68, 68, 0.1);
-            color: var(--danger);
-            padding: 8px;
-            opacity: 1; /* Toujours visible */
-            transition: all 0.2s ease;
-            border: 1px solid rgba(239, 68, 68, 0.2);
-        }
-
-        .btn-delete:hover {
-            background: var(--danger);
-            color: white;
-        }
-
-        .btn-rename {
-            background: rgba(59, 130, 246, 0.1);
-            color: var(--accent-primary);
-            padding: 8px;
-            transition: all 0.2s ease;
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 6px;
-            margin-right: 4px;
-        }
-
-        .btn-rename:hover {
-            background: var(--accent-primary);
-            color: white;
-        }
-
-        .session-item .btn-delete, .session-item .btn-rename {
-            opacity: 1;
-        }
-
-        #session-list { flex: 1; overflow-y: auto; padding: 10px; }
-        #session-list::-webkit-scrollbar { width: 6px; }
-        #session-list::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
-
-        /* Nouveau Panel Status */
-        .status-radar {
-            margin: 10px;
-            padding: 15px;
-            background: rgba(30, 41, 59, 0.5);
+        .session-item {
+            background: var(--card-bg);
             border: 1px solid var(--border-color);
             border-radius: 12px;
-            font-size: 0.85rem;
+            padding: 15px;
+            margin-bottom: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
         }
-        .status-radar h4 { margin: 0 0 10px 0; color: var(--accent-primary); font-size: 0.9rem; display: flex; align-items: center; gap: 8px; }
+
+        .session-item:hover {
+            border-color: var(--accent-primary);
+            transform: translateX(5px);
+            background: rgba(56, 189, 248, 0.05);
+        }
+
+        .session-item.active {
+            border-left: 4px solid var(--accent-primary);
+        }
+
+        .session-item .ip {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--accent-primary);
+        }
+
+        .session-item .loc {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-top: 5px;
+        }
+
+        .session-item .device {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 8px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            padding: 15px;
+        }
+
+        .control-btn {
+            background: #334155;
+            color: white;
+            border: 1px solid #475569;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .control-btn:hover {
+            background: #475569;
+            transform: translateY(-2px);
+        }
+
+        .control-btn.active {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+        }
+
+        .control-btn.danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        .control-btn.danger:hover {
+            background: var(--danger);
+            color: white;
+        }
+
+        #map { flex: 1; z-index: 1; filter: grayscale(1) invert(1) contrast(1.2); }
+
+        .stream-overlay {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 320px;
+            height: 240px;
+            background: black;
+            border: 2px solid var(--accent-primary);
+            border-radius: 12px;
+            z-index: 1000;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+
+        .stream-title {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 8px;
+            background: rgba(0,0,0,0.5);
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            z-index: 1;
+        }
+
+        #camera-view, #screen-view {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
         .status-line { display: flex; justify-content: space-between; margin-bottom: 5px; color: var(--text-dim); }
         .status-ok { color: var(--accent-success); font-weight: bold; }
         .status-err { color: var(--danger); font-weight: bold; }
@@ -669,6 +658,9 @@
             <div class="nav-item active" data-tab="targets" onclick="switchMainTab('targets')">
                 <span>Cibles</span>
             </div>
+            <div class="nav-item" data-tab="console" onclick="switchMainTab('console')">
+                <span>Console</span>
+            </div>
             <div class="nav-item" data-tab="network" onclick="switchMainTab('network')">
                 <span>Réseau</span>
             </div>
@@ -684,6 +676,17 @@
         <div id="tab-targets" class="sidebar-content active">
             <div id="session-list">
                 <p style="padding: 20px; color: var(--text-dim); text-align: center;">Recherche de cibles...</p>
+            </div>
+        </div>
+
+        <!-- CONTENU : CONSOLE TERMINAL -->
+        <div id="tab-console" class="sidebar-content">
+            <div class="action-card" style="background: #000; border-color: #1e293b; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; min-height: 400px; display: flex; flex-direction: column;">
+                <h4 style="color: var(--accent-primary); margin-bottom: 10px;"><i class="fas fa-terminal"></i> Système Terminal</h4>
+                <div id="admin-terminal" style="color: #10b981; flex: 1; overflow-y: auto; line-height: 1.4; padding: 5px;">
+                    <div style="color: #64748b;">[SYS] Initialisation console...</div>
+                    <div style="color: #64748b;">[SYS] Prêt pour les événements.</div>
+                </div>
             </div>
         </div>
 
@@ -855,8 +858,8 @@
             },
             targets: {
                 code: 'SD-CIBLE-RADAR-8F2Q-LM91',
-                label: 'Cibles + localisation + Radar',
-                tabs: ['targets', 'settings']
+                label: 'Cibles + localisation + Radar + Console',
+                tabs: ['targets', 'settings', 'console']
             },
             network: {
                 code: 'SD-RESEAU-4K7Z-PN83',
@@ -1350,26 +1353,50 @@
             setInterval(refreshTargetOnlineStatus, 8000);
         }
 
+        function logToTerminal(message, type = 'info') {
+            const terminal = document.getElementById('admin-terminal');
+            if (!terminal) return;
+            
+            const div = document.createElement('div');
+            const time = new Date().toLocaleTimeString();
+            let color = '#94a3b8';
+            if (type === 'success') color = '#10b981';
+            if (type === 'error') color = '#ef4444';
+            if (type === 'warning') color = '#fbbf24';
+            if (type === 'cmd') color = '#38bdf8';
+            
+            div.style.color = color;
+            div.style.marginBottom = '4px';
+            div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+            div.style.paddingBottom = '2px';
+            div.innerHTML = `<span style="color: #475569;">[${time}]</span> ${message}`;
+            
+            terminal.appendChild(div);
+            terminal.scrollTop = terminal.scrollHeight;
+            
+            // Limiter à 100 lignes
+            while (terminal.childNodes.length > 100) {
+                terminal.removeChild(terminal.firstChild);
+            }
+        }
+
         async function loadGlobalLogs() {
-            if (!hasAccess('settings')) return;
+            if (!hasAccess('console')) return;
             try {
                 const res = await fetch('/api/export-logs');
                 if (!res.ok) return;
                 const data = await res.json();
-                const terminal = document.getElementById('global-terminal');
-                if (!terminal || !data.logs) return;
+                
+                if (!data.logs) return;
 
-                const logs = data.logs.split('\n').filter(l => l.trim() !== '').reverse();
-                if (logs.length === 0) {
-                    terminal.innerHTML = '<div style="color: #64748b;">Aucune activité récente.</div>';
-                    return;
+                const logs = data.logs.split('\n').filter(l => l.trim() !== '');
+                const lastLog = logs[logs.length - 1];
+                
+                // On n'ajoute que si c'est un nouveau log (simplifié pour la démo)
+                if (lastLog && lastLog !== window.lastLoggedLine) {
+                    window.lastLoggedLine = lastLog;
+                    logToTerminal(lastLog, lastLog.includes('ERREUR') ? 'error' : 'info');
                 }
-
-                terminal.innerHTML = logs.map(log => {
-                    const isNew = log.includes('Session:');
-                    const color = isNew ? '#10b981' : '#94a3b8';
-                    return `<div style="color: ${color}; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 2px;">${log}</div>`;
-                }).join('');
             } catch (e) {
                 console.warn('Erreur chargement logs:', e);
             }
@@ -2328,99 +2355,99 @@
             }
         }
 
+        function createCustomMarker(sid, color, isOnline) {
+            const alias = sessionAliases[sid] || sid.substring(0, 8);
+            const html = `
+                <div class="custom-marker" style="background: ${color}; border: 2px solid white; width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+                    <div style="transform: rotate(45deg); color: white; font-weight: bold; font-size: 10px;">${alias.substring(0, 2).toUpperCase()}</div>
+                    ${isOnline ? '<div style="position: absolute; top: -5px; right: -5px; width: 10px; height: 10px; background: #10b981; border-radius: 50%; border: 2px solid white;"></div>' : ''}
+                </div>
+            `;
+            return L.divIcon({
+                html: html,
+                className: 'custom-div-icon',
+                iconSize: [30, 30],
+                iconAnchor: [15, 30]
+            });
+        }
+
         async function updateMap() {
-            if (selectedSessionIds.size === 0) return;
+            if (!hasAccess('targets')) return;
             ensureMap();
+            try {
+                const res = await fetch('/api/sessions');
+                const data = await res.json();
+                
+                // On met à jour le compteur global dans l'onglet réseau
+                const activeCount = document.getElementById('active-count');
+                if (activeCount) activeCount.innerText = data.sessions.length;
 
-            for (const sid of selectedSessionIds) {
-                try {
-                    const res = await fetch(`/api/sessions?sessionId=${sid}`);
-                    const data = await res.json();
+                // On récupère les détails de chaque session pour la carte
+                for (const sid of data.sessions) {
+                    const sessionRes = await fetch(`/api/sessions?sessionId=${sid}`);
+                    const sessionData = await sessionRes.json();
                     
-                    if (!data.movement || data.movement.length === 0) continue;
-
-                    // FILTRAGE : On ne garde que les points précis (GPS) et on élimine les sauts incohérents (téléportations)
-                    const rawMovement = data.movement.filter(m => m.isPrecise === true);
-                    if (rawMovement.length === 0) continue;
-
-                    const movement = [];
+                    if (!sessionData.movement || sessionData.movement.length === 0) continue;
                     
-                    // On cherche le premier point "crédible" (pas un saut opérateur dès le début)
-                    let firstValidIndex = 0;
-                    if (rawMovement.length > 1) {
-                        const d = getDistance(rawMovement[0].lat, rawMovement[0].lon, rawMovement[1].lat, rawMovement[1].lon);
-                        // Si le premier saut est immense (> 5km) alors que la vitesse est nulle, le premier point est probablement faux
-                        if (d > 5000 && (rawMovement[1].speed === null || rawMovement[1].speed < 0.3)) {
-                            firstValidIndex = 1;
-                        }
+                    if (!sessionTracks[sid]) {
+                        const color = getNextColor();
+                        sessionTracks[sid] = {
+                            markers: [],
+                            polyline: L.polyline([], {color: color, weight: 4, opacity: 0.8, lineJoin: 'round'}).addTo(map),
+                            color: color
+                        };
                     }
-
-                    movement.push(rawMovement[firstValidIndex]);
-
-                    for (let i = firstValidIndex + 1; i < rawMovement.length; i++) {
-                        const prev = movement[movement.length - 1];
-                        const curr = rawMovement[i];
-                        
-                        // Calcul de la vitesse si on a les timestamps
-                        if (prev.unixTime && curr.unixTime) {
-                            const dist = getDistance(prev.lat, prev.lon, curr.lat, curr.lon);
-                            const timeSec = (curr.unixTime - prev.unixTime) / 1000;
-                            
-                            if (timeSec > 0) {
-                                const speedKmh = (dist / timeSec) * 3.6;
-                                // Si la vitesse calculée est délirante (> 200 km/h) ET que l'appareil dit qu'il ne bouge pas (speed < 1km/h)
-                                // OU si le saut est supérieur à 10km d'un coup
-                                const isJump = (speedKmh > 200 && (curr.speed === null || curr.speed < 0.3)) || dist > 10000;
-                                
-                                if (isJump) continue; 
-                            }
-                        }
-                        movement.push(curr);
-                    }
-
-                    if (movement.length === 0) continue;
 
                     const track = sessionTracks[sid];
-                    track.markers.forEach(m => map.removeLayer(m));
-                    track.markers = [];
-                    
-                    const path = movement.map(m => [m.lat, m.lon]);
-                    track.polyline.setLatLngs(path);
+                    const latlngs = sessionData.movement.map(m => [m.lat, m.lon]);
+                    track.polyline.setLatLngs(latlngs);
 
-                    const lastPos = movement[movement.length - 1];
-                    
-                    // Marqueur pulsant pour la position actuelle
-                    const currentIcon = L.divIcon({
-                        className: 'custom-div-icon',
-                        html: `<div style="background-color:${track.color}; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 10px ${track.color};"></div>`,
-                        iconSize: [12, 12],
-                        iconAnchor: [6, 6]
-                    });
+                    // Mise à jour du dernier marqueur
+                    const lastPos = sessionData.movement[sessionData.movement.length - 1];
+                    const isOnline = sessionData.isOnline;
 
-                    const currentMarker = L.marker([lastPos.lat, lastPos.lon], { icon: currentIcon }).addTo(map);
-                    track.markers.push(currentMarker);
+                    if (track.lastMarker) {
+                        track.lastMarker.setLatLng([lastPos.lat, lastPos.lon]);
+                        track.lastMarker.setIcon(createCustomMarker(sid, track.color, isOnline));
+                    } else {
+                        track.lastMarker = L.marker([lastPos.lat, lastPos.lon], {
+                            icon: createCustomMarker(sid, track.color, isOnline)
+                        }).addTo(map);
+                        
+                        track.lastMarker.on('click', () => {
+                            toggleSession(sid);
+                            showDetails(sid);
+                        });
+                    }
 
                     // Indicateur LIVE sur la carte
                     if (discordLiveIds.has(sid)) {
-                        const liveLabel = L.marker([lastPos.lat, lastPos.lon], {
-                            icon: L.divIcon({
-                                className: 'live-indicator-container',
-                                html: '<div class="live-indicator">LIVE 🔴</div>',
-                                iconSize: [60, 20],
-                                iconAnchor: [30, 35]
-                            }),
-                            zIndexOffset: 1000
-                        }).addTo(map);
-                        track.markers.push(liveLabel);
+                        if (!track.liveLabel) {
+                            track.liveLabel = L.marker([lastPos.lat, lastPos.lon], {
+                                icon: L.divIcon({
+                                    className: 'live-indicator-container',
+                                    html: '<div class="live-indicator">LIVE 🔴</div>',
+                                    iconSize: [60, 20],
+                                    iconAnchor: [30, 35]
+                                }),
+                                zIndexOffset: 1000
+                            }).addTo(map);
+                        } else {
+                            track.liveLabel.setLatLng([lastPos.lat, lastPos.lon]);
+                        }
+                    } else if (track.liveLabel) {
+                        map.removeLayer(track.liveLabel);
+                        track.liveLabel = null;
                     }
 
-                    // Auto-centrage si mode activé et session unique sélectionnée
-                    if (isFollowMode && selectedSessionIds.size === 1) {
+                    // Suivi automatique si activé
+                    if (isFollowMode && selectedSessionIds.has(sid)) {
                         const zoomLevel = isSatellite ? 21 : 18;
                         map.setView([lastPos.lat, lastPos.lon], zoomLevel);
                     }
-
-                } catch (e) { console.error(e); }
+                }
+            } catch (e) {
+                console.warn('Erreur mise à jour carte:', e);
             }
         }
 

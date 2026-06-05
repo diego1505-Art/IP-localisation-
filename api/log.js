@@ -38,7 +38,34 @@ export default async function handler(req, res) {
     console.error("Erreur géo:", e);
   }
 
-  const { sessionId, isUpdate, forceDiscord, localIp, preciseLocation, deviceStats, userAgent, language, screenResolution, referrer, page } = req.body;
+  const { sessionId, isUpdate, forceDiscord, localIp, preciseLocation, deviceStats, userAgent, language, screenResolution, referrer, page, status } = req.body;
+
+  // --- GESTION DE LA PERSISTANCE REDIS (GOD VERSION) ---
+  if (client) {
+    try {
+      // On marque la session comme active
+      await client.sAdd('active_sessions', sessionId);
+      // On met à jour l'horodatage de dernière vue
+      await client.set(`session_last_seen:${sessionId}`, Date.now().toString());
+      // On expire la session après 24h d'inactivité
+      await client.expire(`session_last_seen:${sessionId}`, 86400);
+      
+      if (deviceStats?.email) {
+        await client.set(`session_email:${sessionId}`, deviceStats.email);
+      }
+
+      // On enregistre le mouvement/historique
+      const historyEntry = JSON.stringify({
+        timestamp: Date.now(),
+        page: page || 'background',
+        status: status || 'online'
+      });
+      await client.lPush(`session_history:${sessionId}`, historyEntry);
+      await client.lTrim(`session_history:${sessionId}`, 0, 99); // Garde les 100 derniers événements
+    } catch (e) {
+      console.error("Erreur Redis log:", e);
+    }
+  }
 
   // --- FILTRAGE DES INFOS BIDON ---
   let validatedLocalIp = localIp;
