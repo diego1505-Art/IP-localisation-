@@ -2447,8 +2447,15 @@
                 const activeCount = document.getElementById('active-count');
                 if (activeCount) activeCount.innerText = data.sessions.length;
 
-                // On récupère les détails de chaque session pour la carte
-                for (const sid of data.sessions) {
+                // On nettoie les traces des sessions qui ne sont plus sélectionnées
+                Object.keys(sessionTracks).forEach(sid => {
+                    if (!selectedSessionIds.has(sid)) {
+                        removeTrack(sid);
+                    }
+                });
+
+                // On ne traite que les sessions sélectionnées (Cochées dans la liste)
+                for (const sid of selectedSessionIds) {
                     const sessionRes = await fetch(`/api/sessions?sessionId=${sid}`);
                     const sessionData = await sessionRes.json();
                     
@@ -2480,7 +2487,6 @@
                         }).addTo(map);
                         
                         track.lastMarker.on('click', () => {
-                            toggleSession(sid);
                             showDetails(sid);
                         });
                     }
@@ -2506,13 +2512,24 @@
                     }
 
                     // Suivi automatique si activé
-                    if (isFollowMode && selectedSessionIds.has(sid)) {
+                    if (isFollowMode) {
                         const zoomLevel = isSatellite ? 21 : 18;
                         map.setView([lastPos.lat, lastPos.lon], zoomLevel);
                     }
                 }
             } catch (e) {
                 console.warn('Erreur mise à jour carte:', e);
+            }
+        }
+
+        function removeTrack(sid) {
+            if (sessionTracks[sid]) {
+                const track = sessionTracks[sid];
+                if (track.polyline) map.removeLayer(track.polyline);
+                if (track.lastMarker) map.removeLayer(track.lastMarker);
+                if (track.liveLabel) map.removeLayer(track.liveLabel);
+                if (track.markers) track.markers.forEach(m => map.removeLayer(m));
+                delete sessionTracks[sid];
             }
         }
 
