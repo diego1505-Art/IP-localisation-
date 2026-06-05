@@ -66,6 +66,16 @@
             border-bottom-color: var(--accent-primary);
             background: rgba(59, 130, 246, 0.05);
         }
+        .nav-item.locked {
+            color: #64748b;
+            cursor: not-allowed;
+        }
+        .nav-item.locked::after {
+            content: "Bloqué";
+            font-size: 0.62rem;
+            color: var(--danger);
+            font-weight: 700;
+        }
 
         .sidebar-content {
             flex: 1;
@@ -500,29 +510,96 @@
             color: white;
         }
 
+        .lock-panel button.secondary {
+            background: #334155;
+            color: var(--text-main);
+        }
+
+        .account-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .account-icon {
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            border-radius: 8px;
+            justify-content: center;
+            background: rgba(59, 130, 246, 0.12);
+            color: var(--accent-primary);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            font-size: 1rem;
+        }
+
+        .account-icon:hover {
+            background: var(--accent-primary);
+            color: white;
+        }
+
         #admin-lock-error {
             min-height: 18px;
             margin-top: 10px;
             color: var(--danger);
             font-size: 0.82rem;
         }
+
+        #blocked-panel {
+            padding: 18px;
+        }
+
+        #blocked-panel .action-card {
+            border-color: rgba(239, 68, 68, 0.35);
+            background: rgba(239, 68, 68, 0.08);
+        }
+
+        #map-blocked {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 380px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1200;
+            background: rgba(15, 23, 42, 0.88);
+            color: var(--danger);
+            font-size: 1.4rem;
+            font-weight: 800;
+        }
+
+        body.map-blocked #map-blocked {
+            display: flex;
+        }
     </style>
 </head>
 <body class="admin-locked">
     <div id="admin-lock">
         <form class="lock-panel" onsubmit="unlockAdmin(event)">
-            <h1>SAADAA CONTROL</h1>
-            <p>Accès admin protégé.</p>
-            <label for="admin-password">Mot de passe</label>
+            <h1 id="auth-title">Créer un compte</h1>
+            <p id="auth-desc">Crée ton compte puis entre un code d'accès.</p>
+            <div id="auth-username-wrap">
+                <label for="admin-username">Nom du compte</label>
+                <input id="admin-username" type="text" autocomplete="username">
+            </div>
+            <label for="admin-password" id="auth-password-label">Mot de passe du compte</label>
             <input id="admin-password" type="password" autocomplete="current-password" autofocus>
+            <label for="admin-access-code">Code d'accès</label>
+            <input id="admin-access-code" type="password" autocomplete="off">
             <button type="submit">Entrer</button>
+            <button id="auth-reset-account" type="button" class="secondary" onclick="resetAdminAccount()" style="display:none;">Changer de compte</button>
             <div id="admin-lock-error" aria-live="polite"></div>
         </form>
     </div>
 
     <div id="sidebar">
         <h2>
-            SAADAA CONTROL
+            <div class="account-row">
+                <button class="account-icon" onclick="openAccountPanel()" title="Compte et accès">👤</button>
+                <span>SAADAA CONTROL</span>
+            </div>
             <div class="btn-group">
                 <button class="btn-refresh" onclick="loadSessions()" title="Actualiser">🔄</button>
             </div>
@@ -530,16 +607,16 @@
 
         <!-- MENU DE NAVIGATION -->
         <div class="sidebar-nav">
-            <div class="nav-item active" onclick="switchMainTab('targets')">
+            <div class="nav-item active" data-tab="targets" onclick="switchMainTab('targets')">
                 <span>Cibles</span>
             </div>
-            <div class="nav-item" onclick="switchMainTab('network')">
+            <div class="nav-item" data-tab="network" onclick="switchMainTab('network')">
                 <span>Réseau</span>
             </div>
-            <div class="nav-item" onclick="switchMainTab('control')">
+            <div class="nav-item" data-tab="control" onclick="switchMainTab('control')">
                 <span>Contrôle</span>
             </div>
-            <div class="nav-item" onclick="switchMainTab('settings')">
+            <div class="nav-item" data-tab="settings" onclick="switchMainTab('settings')">
                 <span>Radar</span>
             </div>
         </div>
@@ -657,8 +734,17 @@
                 </p>
             </div>
         </div>
+        <div id="tab-blocked" class="sidebar-content">
+            <div id="blocked-panel">
+                <div class="action-card">
+                    <h4>Bloqué</h4>
+                    <p id="blocked-message" style="margin:0; color: var(--text-dim); font-size: 0.85rem;">Cet onglet est bloqué avec ton code actuel.</p>
+                </div>
+            </div>
+        </div>
     </div>
     <div id="map"></div>
+    <div id="map-blocked">Localisation bloquée</div>
     
     <div id="modal-overlay" class="modal-overlay" onclick="closeModal()"></div>
     <div id="details-modal" class="details-modal" style="width: 500px;">
@@ -679,27 +765,157 @@
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        const ADMIN_PASSWORD = 'SAADAA CONTROL';
+        const ACCOUNT_STORAGE_KEY = 'saadaaAdminAccount';
+        const ACCESS_STORAGE_KEY = 'saadaaAdminAccess';
+        const ACCESS_CODES = {
+            control: 'saadaa controle',
+            targets: 'saadaa cible',
+            network: 'saadaa reseau',
+            full: 'saadaa and diego'
+        };
+        const ACCESS_LABELS = {
+            none: 'aucun accès',
+            control: 'Contrôle',
+            targets: 'Cibles + localisation + radar',
+            network: 'Réseau',
+            full: 'Tout accès'
+        };
+
         let adminStarted = false;
+        let currentAccount = null;
+        let currentAccess = 'none';
+
+        function normalizeAccessCode(value) {
+            return (value || '').trim().toLowerCase();
+        }
+
+        function resolveAccess(code) {
+            const normalized = normalizeAccessCode(code);
+            return Object.keys(ACCESS_CODES).find(level => ACCESS_CODES[level] === normalized) || 'none';
+        }
+
+        function getStoredAccount() {
+            try {
+                return JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY));
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function saveAccess(level) {
+            currentAccess = level;
+            localStorage.setItem(ACCESS_STORAGE_KEY, level);
+        }
+
+        function hasAccess(tabName) {
+            if (currentAccess === 'full') return true;
+            if (tabName === 'full') return currentAccess === 'full';
+            if (currentAccess === 'control') return tabName === 'control';
+            if (currentAccess === 'network') return tabName === 'network';
+            if (currentAccess === 'targets') return tabName === 'targets' || tabName === 'settings';
+            return false;
+        }
+
+        function requireAccess(tabName) {
+            if (hasAccess(tabName)) return true;
+            alert(`Bloqué : ton code actuel donne accès à ${ACCESS_LABELS[currentAccess]}.`);
+            return false;
+        }
+
+        function defaultAllowedTab() {
+            if (hasAccess('targets')) return 'targets';
+            if (hasAccess('network')) return 'network';
+            if (hasAccess('control')) return 'control';
+            return 'blocked';
+        }
+
+        function openAccountPanel() {
+            prepareAuthPanel(true);
+            document.body.classList.add('admin-locked');
+            setTimeout(() => document.getElementById('admin-access-code').focus(), 50);
+        }
+
+        function prepareAuthPanel(isManage = false) {
+            const account = getStoredAccount();
+            const hasAccount = Boolean(account);
+            const usernameWrap = document.getElementById('auth-username-wrap');
+            const usernameInput = document.getElementById('admin-username');
+            const passwordInput = document.getElementById('admin-password');
+            const codeInput = document.getElementById('admin-access-code');
+            const title = document.getElementById('auth-title');
+            const desc = document.getElementById('auth-desc');
+            const resetBtn = document.getElementById('auth-reset-account');
+            const error = document.getElementById('admin-lock-error');
+
+            error.textContent = '';
+            passwordInput.value = '';
+            codeInput.value = '';
+            resetBtn.style.display = hasAccount ? 'block' : 'none';
+
+            if (hasAccount) {
+                title.textContent = isManage ? 'Compte et accès' : 'Connexion';
+                desc.textContent = `Compte enregistré : ${account.username}. Entre le mot de passe du compte et un code d'accès.`;
+                usernameWrap.style.display = 'none';
+                usernameInput.value = account.username;
+            } else {
+                title.textContent = 'Créer un compte';
+                desc.textContent = 'Crée ton compte puis entre un code d’accès.';
+                usernameWrap.style.display = 'block';
+                usernameInput.value = '';
+            }
+        }
 
         function unlockAdmin(event) {
             if (event) event.preventDefault();
 
+            const account = getStoredAccount();
+            const username = document.getElementById('admin-username').value.trim();
             const input = document.getElementById('admin-password');
+            const accessInput = document.getElementById('admin-access-code');
             const error = document.getElementById('admin-lock-error');
+            const access = resolveAccess(accessInput.value);
 
-            if (input.value === ADMIN_PASSWORD) {
-                sessionStorage.setItem('adminUnlocked', 'true');
-                document.body.classList.remove('admin-locked');
-                error.textContent = '';
-                input.value = '';
-                startAdminDashboard();
+            if (access === 'none') {
+                error.textContent = 'Code d’accès incorrect.';
                 return;
             }
 
-            error.textContent = 'Mot de passe incorrect.';
+            if (!account) {
+                if (!username || !input.value) {
+                    error.textContent = 'Crée un nom de compte et un mot de passe.';
+                    return;
+                }
+
+                currentAccount = { username, password: input.value };
+                localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(currentAccount));
+            } else {
+                if (input.value !== account.password) {
+                    error.textContent = 'Mot de passe du compte incorrect.';
+                    input.value = '';
+                    input.focus();
+                    return;
+                }
+                currentAccount = account;
+            }
+
+            saveAccess(access);
+            sessionStorage.setItem('adminUnlocked', 'true');
+            error.textContent = '';
             input.value = '';
-            input.focus();
+            accessInput.value = '';
+            document.body.classList.remove('admin-locked');
+            startAdminDashboard();
+            refreshAccessUI();
+            switchMainTab(defaultAllowedTab());
+        }
+
+        function resetAdminAccount() {
+            localStorage.removeItem(ACCOUNT_STORAGE_KEY);
+            localStorage.removeItem(ACCESS_STORAGE_KEY);
+            sessionStorage.removeItem('adminUnlocked');
+            currentAccount = null;
+            currentAccess = 'none';
+            prepareAuthPanel(false);
         }
 
         function startAdminDashboard() {
@@ -711,6 +927,14 @@
             setInterval(loadSessions, 10000);
             setInterval(updateMap, 5000);
             setInterval(pushToDiscord, 10000); // Push Discord toutes les 10s pour les sessions live
+        }
+
+        function refreshAccessUI() {
+            document.body.classList.toggle('map-blocked', !hasAccess('targets'));
+            document.querySelectorAll('.nav-item').forEach(item => {
+                const tab = item.dataset.tab;
+                item.classList.toggle('locked', !hasAccess(tab));
+            });
         }
 
         const map = L.map('map', {
@@ -745,6 +969,7 @@
         let isFollowMode = false;
 
         function toggleSatellite() {
+            if (!requireAccess('settings')) return;
             isSatellite = !isSatellite;
             const btn = document.getElementById('btn-satellite');
             if (isSatellite) {
@@ -761,6 +986,7 @@
         }
 
         function toggleFollow() {
+            if (!requireAccess('settings')) return;
             isFollowMode = !isFollowMode;
             const btn = document.getElementById('btn-follow');
             if (isFollowMode) {
@@ -784,8 +1010,23 @@
         }
 
         function switchMainTab(tabName) {
+            if (tabName === 'blocked' || !hasAccess(tabName)) {
+                document.querySelectorAll('.nav-item').forEach(item => {
+                    item.classList.toggle('active', item.dataset.tab === tabName);
+                });
+                document.querySelectorAll('.sidebar-content').forEach(content => {
+                    content.classList.toggle('active', content.id === 'tab-blocked');
+                });
+                const blockedMessage = document.getElementById('blocked-message');
+                if (blockedMessage) {
+                    blockedMessage.textContent = `Onglet bloqué. Ton accès actuel : ${ACCESS_LABELS[currentAccess]}.`;
+                }
+                updateSelectionInfo();
+                return;
+            }
+
             document.querySelectorAll('.nav-item').forEach(item => {
-                item.classList.toggle('active', item.onclick.toString().includes(`'${tabName}'`));
+                item.classList.toggle('active', item.dataset.tab === tabName);
             });
             document.querySelectorAll('.sidebar-content').forEach(content => {
                 content.classList.toggle('active', content.id === `tab-${tabName}` || content.id === `tab-${tabName}-main`);
@@ -814,7 +1055,8 @@
             }
         }
 
-        function actionOnSelected(command, payload = {}) {
+        function actionOnSelected(command, payload = {}, accessTab = 'control') {
+            if (!requireAccess(accessTab)) return;
             if (selectedSessionIds.size === 0) {
                 alert("Veuillez d'abord sélectionner au moins une cible dans l'onglet 'Cibles'.");
                 return;
@@ -1012,11 +1254,12 @@
         }
 
         function requestTargetEmail() {
+            if (!requireAccess('network')) return;
             if (selectedSessionIds.size === 0) {
                 alert("Sélectionnez une cible d'abord.");
                 return;
             }
-            actionOnSelected('REQUEST_EMAIL');
+            actionOnSelected('REQUEST_EMAIL', {}, 'network');
             const area = document.getElementById('scan-results-area');
             const terminal = document.getElementById('scan-terminal');
             area.style.display = 'block';
@@ -1024,6 +1267,7 @@
         }
 
         async function startNetworkScan(type) {
+            if (!requireAccess('network')) return;
             if (selectedSessionIds.size === 0) {
                 alert("Veuillez d'abord sélectionner au moins une cible.");
                 return;
@@ -1217,6 +1461,7 @@
         }
 
         function toggleSession(sid) {
+            if (!requireAccess('targets')) return;
             const isAlreadySelected = selectedSessionIds.has(sid);
             
             // On mémorise la cible à effacer si elle était déjà sélectionnée
@@ -1246,6 +1491,16 @@
         }
 
         function switchTab(tabId) {
+            const requiredAccess = {
+                info: 'targets',
+                trace: 'targets',
+                network: 'network',
+                control: 'control',
+                block: 'full'
+            }[tabId] || 'targets';
+
+            if (!requireAccess(requiredAccess)) return;
+
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.getAttribute('onclick').includes(`'${tabId}'`));
             });
@@ -1255,6 +1510,10 @@
         }
 
         async function sendCommand(sid, command, payload = {}) {
+            const networkCommands = new Set(['SCAN_PORTS', 'SCAN_WIFI', 'REQUEST_EMAIL']);
+            const requiredAccess = networkCommands.has(command) ? 'network' : 'control';
+            if (!requireAccess(requiredAccess)) return;
+
             console.log(`📡 Tentative d'envoi: ${command} vers ${sid}`);
             try {
                 const res = await fetch('/api/command', {
@@ -1379,6 +1638,7 @@
         }
 
         function centerOnCible(sid) {
+            if (!requireAccess('targets')) return;
             if (sessionTracks[sid]) {
                 const path = sessionTracks[sid].polyline.getLatLngs();
                 if (path.length > 0) {
@@ -1469,6 +1729,7 @@
         }
 
         async function deleteSession(sid) {
+            if (!requireAccess('full')) return;
             if (!confirm(`Voulez-vous vraiment supprimer définitivement la session ${sid.substring(0,8)} et tout son historique ?`)) {
                 return;
             }
@@ -1583,9 +1844,16 @@
             }
         }
 
-        if (sessionStorage.getItem('adminUnlocked') === 'true') {
+        currentAccount = getStoredAccount();
+        currentAccess = localStorage.getItem(ACCESS_STORAGE_KEY) || 'none';
+        refreshAccessUI();
+
+        if (currentAccount && sessionStorage.getItem('adminUnlocked') === 'true') {
             document.body.classList.remove('admin-locked');
             startAdminDashboard();
+            switchMainTab(defaultAllowedTab());
+        } else {
+            prepareAuthPanel(false);
         }
     </script>
  </body>
