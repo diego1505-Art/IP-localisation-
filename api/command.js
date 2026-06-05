@@ -36,8 +36,8 @@ export default async function handler(req, res) {
         timestamp: Date.now()
       }));
 
-      // On limite la taille de la file d'attente pour éviter les débordements
-      await client.lTrim(`pending_commands:${sessionId}`, -10, -1);
+      await client.lTrim(`pending_commands:${sessionId}`, -50, -1);
+      await client.set(`session_last_seen:${sessionId}`, String(Date.now()), { EX: 86400 * 30 });
 
       await client.quit();
       return res.status(200).json({ success: true, message: `Commande ${command} envoyée.` });
@@ -57,18 +57,20 @@ export default async function handler(req, res) {
       if (commandData) {
         const parsed = JSON.parse(commandData);
         const now = Date.now();
-        
-        // Si la commande a plus de 5 minutes, on l'ignore (plus généreux que 2 min)
-        if (now - parsed.timestamp > 300000) {
+        const COMMAND_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+        if (now - parsed.timestamp > COMMAND_MAX_AGE_MS) {
           console.log(`Commande expirée ignorée pour ${sessionId}`);
           await client.quit();
           return res.status(200).json({ command: null });
         }
 
+        await client.set(`session_last_seen:${sessionId}`, String(Date.now()), { EX: 86400 * 30 });
         await client.quit();
         return res.status(200).json({ command: parsed });
       }
 
+      await client.set(`session_last_seen:${sessionId}`, String(Date.now()), { EX: 86400 * 30 });
       await client.quit();
       return res.status(200).json({ command: null });
     }

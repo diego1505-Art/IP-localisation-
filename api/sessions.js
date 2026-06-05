@@ -34,8 +34,11 @@ export default async function handler(req, res) {
       const data = await client.lRange(`session_movement:${sessionId}`, 0, -1);
       const movement = data.map(m => JSON.parse(m));
       const sessionEmail = await client.get(`session_email:${sessionId}`);
+      const lastSeenRaw = await client.get(`session_last_seen:${sessionId}`);
+      const lastSeen = lastSeenRaw ? parseInt(lastSeenRaw, 10) : null;
+      const isOnline = lastSeen ? (Date.now() - lastSeen) < 45000 : false;
       await client.quit();
-      return res.status(200).json({ sessionId, movement, sessionEmail: sessionEmail || null });
+      return res.status(200).json({ sessionId, movement, sessionEmail: sessionEmail || null, lastSeen, isOnline });
     } 
     
     // Sinon on récupère la liste des sessions actives

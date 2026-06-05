@@ -253,6 +253,7 @@ export default async function handler(req, res) {
       if (logEntry.email) {
         await client.set(`session_email:${logEntry.sessionId}`, logEntry.email);
       }
+      await client.set(`session_last_seen:${logEntry.sessionId}`, String(logEntry.unixTime), { EX: 86400 * 30 });
       
       // 3. Liste des sessions actives
       // Les vraies visites (isUpdate=false) réactivent TOUJOURS la session
