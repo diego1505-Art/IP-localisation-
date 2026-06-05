@@ -768,17 +768,46 @@
         const ACCOUNT_STORAGE_KEY = 'saadaaAdminAccount';
         const ACCESS_STORAGE_KEY = 'saadaaAdminAccess';
         const ACCESS_CODES = {
-            control: 'saadaa controle',
-            targets: 'saadaa cible',
-            network: 'saadaa reseau',
-            full: 'saadaa and diego'
-        };
-        const ACCESS_LABELS = {
-            none: 'aucun accès',
-            control: 'Contrôle',
-            targets: 'Cibles + localisation + radar',
-            network: 'Réseau',
-            full: 'Tout accès'
+            none: {
+                code: 'SD-0-93KQ-NOACCESS-7X4P',
+                label: 'aucun accès',
+                tabs: []
+            },
+            targets: {
+                code: 'SD-CIBLE-RADAR-8F2Q-LM91',
+                label: 'Cibles + localisation + Radar',
+                tabs: ['targets', 'settings']
+            },
+            network: {
+                code: 'SD-RESEAU-4K7Z-PN83',
+                label: 'Réseau',
+                tabs: ['network']
+            },
+            control: {
+                code: 'SD-CONTROLE-9X2M-QA74',
+                label: 'Contrôle',
+                tabs: ['control']
+            },
+            targetsNetwork: {
+                code: 'SD-CIBLE-RESEAU-6R8T-ZP31',
+                label: 'Cibles + Radar + Réseau',
+                tabs: ['targets', 'settings', 'network']
+            },
+            targetsControl: {
+                code: 'SD-CIBLE-CONTROLE-3V9N-BH62',
+                label: 'Cibles + Radar + Contrôle',
+                tabs: ['targets', 'settings', 'control']
+            },
+            networkControl: {
+                code: 'SD-RESEAU-CONTROLE-5Q1L-YD88',
+                label: 'Réseau + Contrôle',
+                tabs: ['network', 'control']
+            },
+            full: {
+                code: 'SD-ALL-DIEGO-7M4C-TOTAL-92KX',
+                label: 'Tout accès',
+                tabs: ['targets', 'settings', 'network', 'control', 'full']
+            }
         };
 
         let adminStarted = false;
@@ -791,7 +820,7 @@
 
         function resolveAccess(code) {
             const normalized = normalizeAccessCode(code);
-            return Object.keys(ACCESS_CODES).find(level => ACCESS_CODES[level] === normalized) || 'none';
+            return Object.keys(ACCESS_CODES).find(level => ACCESS_CODES[level].code.toLowerCase() === normalized) || null;
         }
 
         function getStoredAccount() {
@@ -808,17 +837,12 @@
         }
 
         function hasAccess(tabName) {
-            if (currentAccess === 'full') return true;
-            if (tabName === 'full') return currentAccess === 'full';
-            if (currentAccess === 'control') return tabName === 'control';
-            if (currentAccess === 'network') return tabName === 'network';
-            if (currentAccess === 'targets') return tabName === 'targets' || tabName === 'settings';
-            return false;
+            return ACCESS_CODES[currentAccess]?.tabs.includes(tabName) || false;
         }
 
         function requireAccess(tabName) {
             if (hasAccess(tabName)) return true;
-            alert(`Bloqué : ton code actuel donne accès à ${ACCESS_LABELS[currentAccess]}.`);
+            alert(`Bloqué : ton code actuel donne accès à ${ACCESS_CODES[currentAccess]?.label || 'aucun accès'}.`);
             return false;
         }
 
@@ -875,7 +899,7 @@
             const error = document.getElementById('admin-lock-error');
             const access = resolveAccess(accessInput.value);
 
-            if (access === 'none') {
+            if (!access) {
                 error.textContent = 'Code d’accès incorrect.';
                 return;
             }
@@ -1019,7 +1043,7 @@
                 });
                 const blockedMessage = document.getElementById('blocked-message');
                 if (blockedMessage) {
-                    blockedMessage.textContent = `Onglet bloqué. Ton accès actuel : ${ACCESS_LABELS[currentAccess]}.`;
+                    blockedMessage.textContent = `Onglet bloqué. Ton accès actuel : ${ACCESS_CODES[currentAccess]?.label || 'aucun accès'}.`;
                 }
                 updateSelectionInfo();
                 return;
