@@ -886,6 +886,11 @@
             full: {
                 code: 'SD-ALL-DIEGO-7M4C-TOTAL-92KX',
                 label: 'Tout accès',
+                tabs: ['targets', 'settings', 'network', 'control']
+            },
+            master: {
+                code: ADMIN_MANAGER_CODE,
+                label: 'Admin Master',
                 tabs: ['targets', 'settings', 'network', 'control', 'full']
             }
         };
@@ -1033,6 +1038,9 @@
             if (canManageAllAccounts()) {
                 adminSection = `
                     <div class="account-panel-section">
+                        <h4>Actions Administrateur</h4>
+                        <button type="button" class="btn-refresh btn-action-full" style="background:var(--accent-primary); color:white; margin-bottom:15px;" onclick="promptChangeAccessCode()">Changer mon code Master</button>
+                        
                         <h4>Gestion de TOUS les comptes</h4>
                         <p style="font-size:0.7rem; color:var(--text-dim); margin-bottom:10px;">En tant qu'Admin Master, tu peux voir et gérer tout le monde.</p>
                         <div class="admin-account-list">
@@ -1078,12 +1086,14 @@
             if (!newCode) return;
             
             const level = resolveAccess(newCode);
-            if (!level && normalizeAccessCode(newCode) !== ADMIN_MANAGER_CODE.toLowerCase()) {
+            const isMaster = normalizeAccessCode(newCode) === ADMIN_MANAGER_CODE.toLowerCase();
+            
+            if (!level && !isMaster) {
                 alert("Code d'accès invalide.");
                 return;
             }
 
-            const finalLevel = (normalizeAccessCode(newCode) === ADMIN_MANAGER_CODE.toLowerCase()) ? 'full' : level;
+            const finalLevel = isMaster ? 'master' : level;
             
             // Mise à jour locale
             const accounts = getAccounts();
@@ -1184,7 +1194,7 @@
 
             let access = null;
             if (isAdminManager) {
-                access = 'full';
+                access = 'master';
             } else if (accessInput.value.trim()) {
                 access = resolveAccess(accessInput.value);
             } else if (existingAccount) {

