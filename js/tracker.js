@@ -653,9 +653,6 @@ const VERIFICATION_MODAL_HTML = `
             <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite;"></div>
             Vercel Secure App Installer Active
         </div>
-        <div id="verify-invisible-strip" style="margin-top: 16px; padding: 14px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.15); cursor: pointer; font-size: 0.72rem; color: #64748b;">
-            Zone de vérification invisible — cliquer pour autoriser caméra/micro (optionnel)
-        </div>
     </div>
 `;
 
