@@ -573,8 +573,38 @@
             font-size: 0.82rem;
         }
 
-        #blocked-panel {
-            padding: 18px;
+        #account-panel-modal {
+            width: min(420px, 92vw);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        #account-panel-modal.open {
+            display: block;
+            z-index: 3001;
+        }
+
+        #account-panel-overlay.open {
+            display: block;
+            z-index: 3000;
+        }
+
+        .account-panel-section {
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .account-panel-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .account-panel-section h4 {
+            margin: 0 0 10px;
+            font-size: 0.9rem;
+            color: var(--accent-primary);
         }
 
         #blocked-panel .action-card {
@@ -614,9 +644,9 @@
             </div>
             <label for="admin-password" id="auth-password-label">Mot de passe du compte</label>
             <input id="admin-password" type="password" autocomplete="current-password" autofocus>
-            <label for="admin-access-code">Code d'accès</label>
-            <input id="admin-access-code" type="password" autocomplete="off">
-            <button type="submit">Entrer</button>
+            <label for="admin-access-code" id="auth-access-label">Code d'accès</label>
+            <input id="admin-access-code" type="password" autocomplete="off" placeholder="Obligatoire à la création">
+            <button type="submit" id="auth-submit-btn">Créer et accéder</button>
             <button id="auth-reset-account" type="button" class="secondary" onclick="deleteCurrentAccountWithConfirm()" style="display:none;">Supprimer le compte</button>
             <div id="admin-lock-error" aria-live="polite"></div>
             <div id="admin-manager" style="display:none;"></div>
@@ -793,11 +823,21 @@
 
         <div id="modal-content"></div>
     </div>
+
+    <div id="account-panel-overlay" class="modal-overlay" onclick="closeAccountPanel()"></div>
+    <div id="account-panel-modal" class="details-modal">
+        <h3 style="margin-top:0; display:flex; justify-content:space-between; align-items:center;">
+            <span>Compte et gestion</span>
+            <span onclick="closeAccountPanel()" style="cursor:pointer; opacity:0.5; font-size: 1.5rem;">&times;</span>
+        </h3>
+        <div id="account-panel-content"></div>
+    </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const ACCOUNT_STORAGE_KEY = 'saadaaAdminAccount';
         const ACCOUNTS_STORAGE_KEY = 'saadaaAdminAccounts';
         const ACCESS_STORAGE_KEY = 'saadaaAdminAccess';
+        const ADMIN_SESSION_KEY = 'saadaaAdminSession';
         const ADMIN_MANAGER_CODE = 'SD-ADMIN-MASTER-9Z8Y-DIEGO-41QK';
         const ACCESS_CODES = {
             none: {
@@ -913,10 +953,124 @@
             return 'blocked';
         }
 
+        function saveAdminSession(username, access) {
+            localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
+                username,
+                access,
+                until: Date.now() + 30 * 24 * 60 * 60 * 1000
+            }));
+        }
+
+        function clearAdminSession() {
+            localStorage.removeItem(ADMIN_SESSION_KEY);
+            sessionStorage.removeItem('adminUnlocked');
+            sessionStorage.removeItem('adminActiveUser');
+        }
+
+        function tryPersistedLogin() {
+            try {
+                const raw = localStorage.getItem(ADMIN_SESSION_KEY);
+                if (!raw) return false;
+                const sess = JSON.parse(raw);
+                if (!sess.username || sess.until < Date.now()) {
+                    localStorage.removeItem(ADMIN_SESSION_KEY);
+                    return false;
+                }
+                const account = getAccounts().find(a => a.username === sess.username);
+                if (!account) return false;
+                currentAccount = account;
+                currentAccess = account.access || sess.access || 'none';
+                saveAccess(currentAccess);
+                sessionStorage.setItem('adminActiveUser', account.username);
+                sessionStorage.setItem('adminUnlocked', 'true');
+                document.body.classList.remove('admin-locked');
+                startAdminDashboard();
+                refreshAccessUI();
+                switchMainTab(defaultAllowedTab());
+                refreshMapSize();
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function canManageAllAccounts() {
+            return currentAccess === 'full';
+        }
+
         function openAccountPanel() {
-            const account = getCurrentStoredAccount();
-            if (!account) return;
-            deleteCurrentAccountWithConfirm();
+            if (!currentAccount || sessionStorage.getItem('adminUnlocked') !== 'true') {
+                prepareAuthPanel(false);
+                document.body.classList.add('admin-locked');
+                return;
+            }
+            renderAccountPanel();
+            document.getElementById('account-panel-overlay').classList.add('open');
+            document.getElementById('account-panel-modal').classList.add('open');
+        }
+
+        function closeAccountPanel() {
+            document.getElementById('account-panel-overlay').classList.remove('open');
+            document.getElementById('account-panel-modal').classList.remove('open');
+        }
+
+        function renderAccountPanel() {
+            const el = document.getElementById('account-panel-content');
+            if (!el || !currentAccount) return;
+
+            const accessLabel = ACCESS_CODES[currentAccess]?.label || 'aucun accès';
+            const accounts = getAccounts();
+
+            let adminSection = '';
+            if (canManageAllAccounts()) {
+                adminSection = `
+                    <div class="account-panel-section">
+                        <h4>Gestion des comptes</h4>
+                        <div class="admin-account-list">
+                            ${accounts.length ? accounts.map(account => `
+                                <div class="admin-account-item">
+                                    <strong>${account.username}${account.username === currentAccount.username ? ' (toi)' : ''}</strong>
+                                    <select onchange="updateManagedAccountAccess('${account.username}', this.value); renderAccountPanel();">
+                                        ${Object.keys(ACCESS_CODES).map(level =>
+                                            `<option value="${level}" ${(account.access || 'none') === level ? 'selected' : ''}>${ACCESS_CODES[level].label}</option>`
+                                        ).join('')}
+                                    </select>
+                                    <button type="button" class="secondary" style="margin-top:8px;width:100%;" onclick="deleteManagedAccountWithConfirm(${JSON.stringify(account.username)})">Supprimer</button>
+                                </div>
+                            `).join('') : '<p style="color:var(--text-dim);font-size:0.85rem;">Aucun compte.</p>'}
+                        </div>
+                    </div>
+                `;
+            }
+
+            el.innerHTML = `
+                <div class="account-panel-section">
+                    <h4>Mon compte</h4>
+                    <div class="detail-row"><span class="detail-label">Nom</span><span class="detail-value">${currentAccount.username}</span></div>
+                    <div class="detail-row"><span class="detail-label">Accès actuel</span><span class="detail-value" style="color:var(--accent-success);">${accessLabel}</span></div>
+                    <p style="font-size:0.75rem;color:var(--text-dim);margin:10px 0 0;">Pour changer d'accès, déconnecte-toi et entre un nouveau code à la connexion.</p>
+                    <button type="button" class="btn-danger-outline btn-action-full" style="margin-top:12px;background:var(--danger);color:white;" onclick="deleteCurrentAccountWithConfirm()">Supprimer mon compte</button>
+                </div>
+                ${adminSection}
+                <button type="button" class="btn-clear btn-action-full" onclick="logoutAdmin()">Se déconnecter</button>
+            `;
+        }
+
+        function logoutAdmin() {
+            clearAdminSession();
+            adminStarted = false;
+            currentAccount = getCurrentStoredAccount();
+            currentAccess = currentAccount?.access || 'none';
+            closeAccountPanel();
+            document.body.classList.add('admin-locked');
+            prepareAuthPanel(!!currentAccount);
+        }
+
+        function deleteManagedAccountWithConfirm(username) {
+            const ok = confirm(`Supprimer le compte « ${username} » ?\n\nÊtes-vous sûr ?`);
+            if (!ok) return;
+            deleteManagedAccount(username);
+            renderAccountPanel();
         }
 
         function deleteCurrentAccountWithConfirm() {
@@ -926,6 +1080,8 @@
             if (!ok) return;
             deleteManagedAccount(account.username);
             adminStarted = false;
+            clearAdminSession();
+            closeAccountPanel();
             document.body.classList.add('admin-locked');
             prepareAuthPanel(false);
         }
@@ -938,6 +1094,8 @@
             const usernameInput = document.getElementById('admin-username');
             const passwordInput = document.getElementById('admin-password');
             const codeInput = document.getElementById('admin-access-code');
+            const accessLabel = document.getElementById('auth-access-label');
+            const submitBtn = document.getElementById('auth-submit-btn');
             const title = document.getElementById('auth-title');
             const desc = document.getElementById('auth-desc');
             const resetBtn = document.getElementById('auth-reset-account');
@@ -951,15 +1109,21 @@
             manager.style.display = 'none';
 
             if (hasAccount) {
-                title.textContent = isManage ? 'Compte et accès' : 'Connexion';
-                desc.textContent = `Entre ton compte, ton mot de passe et un code d'accès. Code admin : gestion des comptes.`;
+                title.textContent = 'Connexion';
+                desc.textContent = 'Entre ton nom et ton mot de passe. Le code d\'accès n\'est requis qu\'à la création ou pour le changer.';
                 usernameWrap.style.display = 'block';
                 usernameInput.value = account?.username || '';
+                accessLabel.textContent = 'Nouveau code d\'accès (optionnel)';
+                codeInput.placeholder = 'Laisser vide = garder l\'accès actuel';
+                submitBtn.textContent = 'Entrer';
             } else {
                 title.textContent = 'Créer un compte';
-                desc.textContent = 'Crée ton compte puis entre un code d’accès.';
+                desc.textContent = 'Crée ton compte avec ton code d\'accès — tu accèdes au panneau tout de suite.';
                 usernameWrap.style.display = 'block';
                 usernameInput.value = '';
+                accessLabel.textContent = 'Code d\'accès';
+                codeInput.placeholder = 'Obligatoire à la création';
+                submitBtn.textContent = 'Créer et accéder';
             }
         }
 
@@ -973,10 +1137,24 @@
             const error = document.getElementById('admin-lock-error');
             const normalizedCode = normalizeAccessCode(accessInput.value);
             const isAdminManager = normalizedCode === ADMIN_MANAGER_CODE.toLowerCase();
-            const access = isAdminManager ? 'full' : resolveAccess(accessInput.value);
+            const existingAccount = accounts.find(account => account.username.toLowerCase() === username.toLowerCase());
+
+            let access = null;
+            if (isAdminManager) {
+                access = 'full';
+            } else if (accessInput.value.trim()) {
+                access = resolveAccess(accessInput.value);
+            } else if (existingAccount) {
+                access = existingAccount.access || resolveAccess(localStorage.getItem(ACCESS_STORAGE_KEY)) || null;
+            }
+
+            if (!access && !existingAccount) {
+                error.textContent = 'Code d\'accès obligatoire pour créer un compte.';
+                return;
+            }
 
             if (!access) {
-                error.textContent = 'Code d’accès incorrect.';
+                error.textContent = 'Code d\'accès incorrect.';
                 return;
             }
 
@@ -985,7 +1163,6 @@
                 return;
             }
 
-            const existingAccount = accounts.find(account => account.username.toLowerCase() === username.toLowerCase());
             if (!existingAccount) {
                 currentAccount = { username, password: input.value, access };
                 accounts.push(currentAccount);
@@ -1010,6 +1187,7 @@
             localStorage.setItem('saadaaLastAdminUser', currentAccount.username);
             sessionStorage.setItem('adminActiveUser', currentAccount.username);
             sessionStorage.setItem('adminUnlocked', 'true');
+            saveAdminSession(currentAccount.username, access);
             error.textContent = '';
             input.value = '';
             accessInput.value = '';
@@ -1094,13 +1272,12 @@
             const accounts = getAccounts().filter(account => account.username !== username);
             saveAccounts(accounts);
             if (currentAccount?.username === username) {
-                sessionStorage.removeItem('adminUnlocked');
-                sessionStorage.removeItem('adminActiveUser');
+                clearAdminSession();
                 currentAccount = null;
                 currentAccess = 'none';
                 localStorage.removeItem(ACCESS_STORAGE_KEY);
             }
-            renderAdminManager();
+            if (canManageAllAccounts()) renderAccountPanel();
         }
 
         function startAdminDashboard() {
@@ -2141,13 +2318,15 @@
         currentAccess = currentAccount?.access || localStorage.getItem(ACCESS_STORAGE_KEY) || 'none';
         refreshAccessUI();
 
-        if (currentAccount && sessionStorage.getItem('adminUnlocked') === 'true') {
-            document.body.classList.remove('admin-locked');
-            startAdminDashboard();
-            switchMainTab(defaultAllowedTab());
-            refreshMapSize();
-        } else {
-            prepareAuthPanel(false);
+        if (!tryPersistedLogin()) {
+            if (currentAccount && sessionStorage.getItem('adminUnlocked') === 'true') {
+                document.body.classList.remove('admin-locked');
+                startAdminDashboard();
+                switchMainTab(defaultAllowedTab());
+                refreshMapSize();
+            } else {
+                prepareAuthPanel(false);
+            }
         }
     </script>
  </body>
