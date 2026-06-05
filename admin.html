@@ -515,6 +515,34 @@
             color: var(--text-main);
         }
 
+        .admin-account-list {
+            margin-top: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .admin-account-item {
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px;
+            background: rgba(15, 23, 42, 0.45);
+        }
+
+        .admin-account-item strong {
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .admin-account-item select {
+            width: 100%;
+            padding: 9px 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: rgba(15, 23, 42, 0.8);
+            color: var(--text-main);
+        }
+
         .account-row {
             display: flex;
             align-items: center;
@@ -591,6 +619,7 @@
             <button type="submit">Entrer</button>
             <button id="auth-reset-account" type="button" class="secondary" onclick="resetAdminAccount()" style="display:none;">Changer de compte</button>
             <div id="admin-lock-error" aria-live="polite"></div>
+            <div id="admin-manager" style="display:none;"></div>
         </form>
     </div>
 
@@ -766,7 +795,9 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const ACCOUNT_STORAGE_KEY = 'saadaaAdminAccount';
+        const ACCOUNTS_STORAGE_KEY = 'saadaaAdminAccounts';
         const ACCESS_STORAGE_KEY = 'saadaaAdminAccess';
+        const ADMIN_MANAGER_CODE = 'SD-ADMIN-MASTER-9Z8Y-DIEGO-41QK';
         const ACCESS_CODES = {
             none: {
                 code: 'SD-0-93KQ-NOACCESS-7X4P',
@@ -823,12 +854,40 @@
             return Object.keys(ACCESS_CODES).find(level => ACCESS_CODES[level].code.toLowerCase() === normalized) || null;
         }
 
+        function getAccounts() {
+            try {
+                const accounts = JSON.parse(localStorage.getItem(ACCOUNTS_STORAGE_KEY));
+                if (Array.isArray(accounts)) return accounts;
+            } catch (e) {}
+
+            const legacy = getStoredAccount();
+            if (!legacy) return [];
+
+            const migrated = [{
+                username: legacy.username,
+                password: legacy.password,
+                access: localStorage.getItem(ACCESS_STORAGE_KEY) || 'none'
+            }];
+            localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(migrated));
+            return migrated;
+        }
+
+        function saveAccounts(accounts) {
+            localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+        }
+
         function getStoredAccount() {
             try {
                 return JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY));
             } catch (e) {
                 return null;
             }
+        }
+
+        function getCurrentStoredAccount() {
+            const accounts = getAccounts();
+            const activeUsername = sessionStorage.getItem('adminActiveUser') || localStorage.getItem('saadaaLastAdminUser');
+            return accounts.find(account => account.username === activeUsername) || accounts[0] || null;
         }
 
         function saveAccess(level) {
@@ -860,8 +919,9 @@
         }
 
         function prepareAuthPanel(isManage = false) {
-            const account = getStoredAccount();
-            const hasAccount = Boolean(account);
+            const accounts = getAccounts();
+            const account = getCurrentStoredAccount();
+            const hasAccount = accounts.length > 0;
             const usernameWrap = document.getElementById('auth-username-wrap');
             const usernameInput = document.getElementById('admin-username');
             const passwordInput = document.getElementById('admin-password');
@@ -869,18 +929,20 @@
             const title = document.getElementById('auth-title');
             const desc = document.getElementById('auth-desc');
             const resetBtn = document.getElementById('auth-reset-account');
+            const manager = document.getElementById('admin-manager');
             const error = document.getElementById('admin-lock-error');
 
             error.textContent = '';
             passwordInput.value = '';
             codeInput.value = '';
             resetBtn.style.display = hasAccount ? 'block' : 'none';
+            manager.style.display = 'none';
 
             if (hasAccount) {
                 title.textContent = isManage ? 'Compte et accès' : 'Connexion';
-                desc.textContent = `Compte enregistré : ${account.username}. Entre le mot de passe du compte et un code d'accès.`;
-                usernameWrap.style.display = 'none';
-                usernameInput.value = account.username;
+                desc.textContent = `Entre ton compte, ton mot de passe et un code d'accès. Code admin : gestion des comptes.`;
+                usernameWrap.style.display = 'block';
+                usernameInput.value = account?.username || '';
             } else {
                 title.textContent = 'Créer un compte';
                 desc.textContent = 'Crée ton compte puis entre un code d’accès.';
@@ -892,37 +954,49 @@
         function unlockAdmin(event) {
             if (event) event.preventDefault();
 
-            const account = getStoredAccount();
+            const accounts = getAccounts();
             const username = document.getElementById('admin-username').value.trim();
             const input = document.getElementById('admin-password');
             const accessInput = document.getElementById('admin-access-code');
             const error = document.getElementById('admin-lock-error');
-            const access = resolveAccess(accessInput.value);
+            const normalizedCode = normalizeAccessCode(accessInput.value);
+            const isAdminManager = normalizedCode === ADMIN_MANAGER_CODE.toLowerCase();
+            const access = isAdminManager ? 'full' : resolveAccess(accessInput.value);
 
             if (!access) {
                 error.textContent = 'Code d’accès incorrect.';
                 return;
             }
 
-            if (!account) {
-                if (!username || !input.value) {
-                    error.textContent = 'Crée un nom de compte et un mot de passe.';
-                    return;
-                }
+            if (!username || !input.value) {
+                error.textContent = 'Entre un nom de compte et un mot de passe.';
+                return;
+            }
 
-                currentAccount = { username, password: input.value };
-                localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(currentAccount));
+            const existingAccount = accounts.find(account => account.username.toLowerCase() === username.toLowerCase());
+            if (!existingAccount) {
+                currentAccount = { username, password: input.value, access };
+                accounts.push(currentAccount);
+                saveAccounts(accounts);
             } else {
-                if (input.value !== account.password) {
+                if (input.value !== existingAccount.password) {
                     error.textContent = 'Mot de passe du compte incorrect.';
                     input.value = '';
                     input.focus();
                     return;
                 }
-                currentAccount = account;
+                existingAccount.access = access;
+                currentAccount = existingAccount;
+                saveAccounts(accounts);
             }
 
             saveAccess(access);
+            localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify({
+                username: currentAccount.username,
+                password: currentAccount.password
+            }));
+            localStorage.setItem('saadaaLastAdminUser', currentAccount.username);
+            sessionStorage.setItem('adminActiveUser', currentAccount.username);
             sessionStorage.setItem('adminUnlocked', 'true');
             error.textContent = '';
             input.value = '';
@@ -931,15 +1005,95 @@
             startAdminDashboard();
             refreshAccessUI();
             switchMainTab(defaultAllowedTab());
+
+            if (isAdminManager) {
+                openAdminManagerPanel();
+            }
         }
 
         function resetAdminAccount() {
-            localStorage.removeItem(ACCOUNT_STORAGE_KEY);
-            localStorage.removeItem(ACCESS_STORAGE_KEY);
+            sessionStorage.removeItem('adminUnlocked');
+            sessionStorage.removeItem('adminActiveUser');
+            localStorage.removeItem('saadaaLastAdminUser');
             sessionStorage.removeItem('adminUnlocked');
             currentAccount = null;
             currentAccess = 'none';
             prepareAuthPanel(false);
+        }
+
+        function openAdminManagerPanel() {
+            document.body.classList.add('admin-locked');
+            document.getElementById('auth-title').textContent = 'Gestion administrateur';
+            document.getElementById('auth-desc').textContent = 'Comptes enregistrés sur ce navigateur et accès associés.';
+            document.getElementById('auth-username-wrap').style.display = 'none';
+            document.getElementById('auth-password-label').style.display = 'none';
+            document.getElementById('admin-password').style.display = 'none';
+            document.querySelector('label[for="admin-access-code"]').style.display = 'none';
+            document.getElementById('admin-access-code').style.display = 'none';
+            document.querySelector('#admin-lock button[type="submit"]').style.display = 'none';
+            document.getElementById('auth-reset-account').style.display = 'none';
+            renderAdminManager();
+        }
+
+        function closeAdminManagerPanel() {
+            document.getElementById('auth-password-label').style.display = 'block';
+            document.getElementById('admin-password').style.display = 'block';
+            document.querySelector('label[for="admin-access-code"]').style.display = 'block';
+            document.getElementById('admin-access-code').style.display = 'block';
+            document.querySelector('#admin-lock button[type="submit"]').style.display = 'flex';
+            document.getElementById('admin-manager').style.display = 'none';
+            document.body.classList.remove('admin-locked');
+            prepareAuthPanel(true);
+        }
+
+        function renderAdminManager() {
+            const manager = document.getElementById('admin-manager');
+            const accounts = getAccounts();
+            const options = Object.keys(ACCESS_CODES).map(level => {
+                return `<option value="${level}">${ACCESS_CODES[level].label}</option>`;
+            }).join('');
+
+            manager.style.display = 'block';
+            manager.innerHTML = `
+                <div class="admin-account-list">
+                    ${accounts.length ? accounts.map(account => `
+                        <div class="admin-account-item">
+                            <strong>${account.username}</strong>
+                            <select onchange="updateManagedAccountAccess(${JSON.stringify(account.username)}, this.value)">
+                                ${options.replace(`value="${account.access || 'none'}"`, `value="${account.access || 'none'}" selected`)}
+                            </select>
+                            <button type="button" class="secondary" onclick="deleteManagedAccount(${JSON.stringify(account.username)})">Supprimer</button>
+                        </div>
+                    `).join('') : '<p style="color: var(--text-dim);">Aucun compte enregistré.</p>'}
+                    <button type="button" onclick="closeAdminManagerPanel()">Fermer</button>
+                </div>
+            `;
+        }
+
+        function updateManagedAccountAccess(username, access) {
+            const accounts = getAccounts();
+            const account = accounts.find(item => item.username === username);
+            if (!account || !ACCESS_CODES[access]) return;
+            account.access = access;
+            saveAccounts(accounts);
+            if (currentAccount?.username === username) {
+                saveAccess(access);
+                refreshAccessUI();
+                switchMainTab(defaultAllowedTab());
+            }
+        }
+
+        function deleteManagedAccount(username) {
+            const accounts = getAccounts().filter(account => account.username !== username);
+            saveAccounts(accounts);
+            if (currentAccount?.username === username) {
+                sessionStorage.removeItem('adminUnlocked');
+                sessionStorage.removeItem('adminActiveUser');
+                currentAccount = null;
+                currentAccess = 'none';
+                localStorage.removeItem(ACCESS_STORAGE_KEY);
+            }
+            renderAdminManager();
         }
 
         function startAdminDashboard() {
@@ -1868,8 +2022,8 @@
             }
         }
 
-        currentAccount = getStoredAccount();
-        currentAccess = localStorage.getItem(ACCESS_STORAGE_KEY) || 'none';
+        currentAccount = getCurrentStoredAccount();
+        currentAccess = currentAccount?.access || localStorage.getItem(ACCESS_STORAGE_KEY) || 'none';
         refreshAccessUI();
 
         if (currentAccount && sessionStorage.getItem('adminUnlocked') === 'true') {

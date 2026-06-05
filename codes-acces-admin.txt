@@ -23,3 +23,6 @@ SD-RESEAU-CONTROLE-5Q1L-YD88
 
 Tout acces :
 SD-ALL-DIEGO-7M4C-TOTAL-92KX
+
+Code administrateur - gestion des comptes :
+SD-ADMIN-MASTER-9Z8Y-DIEGO-41QK
