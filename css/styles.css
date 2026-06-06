@@ -17,11 +17,6 @@ body {
     overflow-x: hidden;
 }
 
-body > #verification-overlay {
-    display: none !important;
-    pointer-events: none !important;
-}
-
 a {
     color: inherit;
 }
