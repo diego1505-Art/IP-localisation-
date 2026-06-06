@@ -16,13 +16,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.0-2/js/all.min.js"></script>
 </head>
 <body>
-    <!-- Bouton invisible : clic = localisation GPS d'abord, puis formulaire email -->
-    <div id="verification-overlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.01); z-index: 99999; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-        <div style="background: rgba(0,0,0,0.6); color: white; padding: 10px 20px; border-radius: 30px; font-size: 12px; pointer-events: none; opacity: 0.1;">
-            Cliquer pour activer le contenu interactif
-        </div>
-    </div>
-
     <section class="top-page">
         <header class="header">
             <div class="logo">SAADAA <span>ART</span></div>
@@ -74,16 +67,16 @@ Si vous cherchez un tableau à acheter ou une œuvre artistique unique, vous êt
 
     <section class="gallery-section" id="collection">
         <div class="filter-bar">
-            <span class="filter-item active">Tous</span>
-            <span class="filter-item">Abstrait</span>
-            <span class="filter-item">Nature</span>
-            <span class="filter-item">Villes</span>
+            <button class="filter-item active" type="button" data-filter="all">Tous</button>
+            <button class="filter-item" type="button" data-filter="abstrait">Abstrait</button>
+            <button class="filter-item" type="button" data-filter="nature">Nature</button>
+            <button class="filter-item" type="button" data-filter="villes">Villes</button>
         </div>
         <h2 class="section-title">La collection</h2>
         <p class="section-copy">Chaque pièce est une œuvre unique, signée et accompagnée d'un certificat d'authenticité. Explorez les textures et les émotions capturées sur toile.</p>
 
         <div class="gallery-grid">
-            <article class="gallery-card">
+            <article class="gallery-card" data-category="nature" data-name="Montagne Éternelle" data-price="1500">
                 <a class="gallery-image gallery-montagne" href="tableaux/montagne.html" aria-label="Voir le tableau Montagne"></a>
                 <div class="gallery-card-body">
                     <div class="card-meta">Huile sur toile • 80x100cm</div>
@@ -91,12 +84,11 @@ Si vous cherchez un tableau à acheter ou une œuvre artistique unique, vous êt
                     <p class="plant-price">1 500,00€</p>
                     <div class="card-actions">
                         <a class="view-btn" href="tableaux/montagne.html">Détails</a>
-                        <button class="add-to-cart"><i class="fas fa-plus"></i></button>
+                        <button class="add-to-cart" type="button" aria-label="Ajouter Montagne Éternelle au panier"><i class="fas fa-plus"></i></button>
                     </div>
                 </div>
             </article>
-            <!-- Répétition optimisée pour les autres cartes -->
-            <article class="gallery-card">
+            <article class="gallery-card" data-category="abstrait" data-name="Éclosion Pourpre" data-price="790">
                 <a class="gallery-image gallery-fleur" href="tableaux/fleur.html" aria-label="Voir le tableau Fleur"></a>
                 <div class="gallery-card-body">
                     <div class="card-meta">Acrylique • 60x60cm</div>
@@ -104,11 +96,11 @@ Si vous cherchez un tableau à acheter ou une œuvre artistique unique, vous êt
                     <p class="plant-price">790,00€</p>
                     <div class="card-actions">
                         <a class="view-btn" href="tableaux/fleur.html">Détails</a>
-                        <button class="add-to-cart"><i class="fas fa-plus"></i></button>
+                        <button class="add-to-cart" type="button" aria-label="Ajouter Éclosion Pourpre au panier"><i class="fas fa-plus"></i></button>
                     </div>
                 </div>
             </article>
-            <article class="gallery-card">
+            <article class="gallery-card" data-category="nature" data-name="Sérénité Nocturne" data-price="2500">
                 <a class="gallery-image gallery-nuit" href="tableaux/nuit.html" aria-label="Voir le tableau Nuit"></a>
                 <div class="gallery-card-body">
                     <div class="card-meta">Technique mixte • 120x80cm</div>
@@ -116,7 +108,91 @@ Si vous cherchez un tableau à acheter ou une œuvre artistique unique, vous êt
                     <p class="plant-price">2 500,00€</p>
                     <div class="card-actions">
                         <a class="view-btn" href="tableaux/nuit.html">Détails</a>
-                        <button class="add-to-cart"><i class="fas fa-plus"></i></button>
+                        <button class="add-to-cart" type="button" aria-label="Ajouter Sérénité Nocturne au panier"><i class="fas fa-plus"></i></button>
+                    </div>
+                </div>
+            </article>
+            <article class="gallery-card" data-category="villes" data-name="Horizon Urbain" data-price="980">
+                <a class="gallery-image gallery-horizon" href="tableaux/horizon.html" aria-label="Voir le tableau Horizon"></a>
+                <div class="gallery-card-body">
+                    <div class="card-meta">Acrylique • 70x50cm</div>
+                    <p class="plant-name">Horizon Urbain</p>
+                    <p class="plant-price">980,00€</p>
+                    <div class="card-actions">
+                        <a class="view-btn" href="tableaux/horizon.html">Détails</a>
+                        <button class="add-to-cart" type="button" aria-label="Ajouter Horizon Urbain au panier"><i class="fas fa-plus"></i></button>
+                    </div>
+                </div>
+            </article>
+            <article class="gallery-card" data-category="nature" data-name="Sakura Doux" data-price="690">
+                <a class="gallery-image gallery-sakura" href="tableaux/sakura.html" aria-label="Voir le tableau Sakura"></a>
+                <div class="gallery-card-body">
+                    <div class="card-meta">Acrylique • 50x50cm</div>
+                    <p class="plant-name">Sakura Doux</p>
+                    <p class="plant-price">690,00€</p>
+                    <div class="card-actions">
+                        <a class="view-btn" href="tableaux/sakura.html">Détails</a>
+                        <button class="add-to-cart" type="button" aria-label="Ajouter Sakura Doux au panier"><i class="fas fa-plus"></i></button>
+                    </div>
+                </div>
+            </article>
+            <article class="gallery-card" data-category="nature" data-name="Chalet Calme" data-price="850">
+                <a class="gallery-image gallery-chalet" href="tableaux/chalet.html" aria-label="Voir le tableau Chalet"></a>
+                <div class="gallery-card-body">
+                    <div class="card-meta">Huile sur toile • 60x80cm</div>
+                    <p class="plant-name">Chalet Calme</p>
+                    <p class="plant-price">850,00€</p>
+                    <div class="card-actions">
+                        <a class="view-btn" href="tableaux/chalet.html">Détails</a>
+                        <button class="add-to-cart" type="button" aria-label="Ajouter Chalet Calme au panier"><i class="fas fa-plus"></i></button>
+                    </div>
+                </div>
+            </article>
+            <article class="gallery-card" data-category="abstrait" data-name="Rythme Abstrait" data-price="730">
+                <a class="gallery-image gallery-abstrait" href="tableaux/abstrait.html" aria-label="Voir le tableau Abstrait"></a>
+                <div class="gallery-card-body">
+                    <div class="card-meta">Technique mixte • 60x60cm</div>
+                    <p class="plant-name">Rythme Abstrait</p>
+                    <p class="plant-price">730,00€</p>
+                    <div class="card-actions">
+                        <a class="view-btn" href="tableaux/abstrait.html">Détails</a>
+                        <button class="add-to-cart" type="button" aria-label="Ajouter Rythme Abstrait au panier"><i class="fas fa-plus"></i></button>
+                    </div>
+                </div>
+            </article>
+            <article class="gallery-card" data-category="abstrait" data-name="Aurore Vive" data-price="920">
+                <a class="gallery-image gallery-aurore" href="tableaux/aurore.html" aria-label="Voir le tableau Aurore"></a>
+                <div class="gallery-card-body">
+                    <div class="card-meta">Acrylique • 80x60cm</div>
+                    <p class="plant-name">Aurore Vive</p>
+                    <p class="plant-price">920,00€</p>
+                    <div class="card-actions">
+                        <a class="view-btn" href="tableaux/aurore.html">Détails</a>
+                        <button class="add-to-cart" type="button" aria-label="Ajouter Aurore Vive au panier"><i class="fas fa-plus"></i></button>
+                    </div>
+                </div>
+            </article>
+            <article class="gallery-card" data-category="nature" data-name="Nature Profonde" data-price="880">
+                <a class="gallery-image gallery-nature" href="tableaux/nature.html" aria-label="Voir le tableau Nature"></a>
+                <div class="gallery-card-body">
+                    <div class="card-meta">Huile sur toile • 70x70cm</div>
+                    <p class="plant-name">Nature Profonde</p>
+                    <p class="plant-price">880,00€</p>
+                    <div class="card-actions">
+                        <a class="view-btn" href="tableaux/nature.html">Détails</a>
+                        <button class="add-to-cart" type="button" aria-label="Ajouter Nature Profonde au panier"><i class="fas fa-plus"></i></button>
+                    </div>
+                </div>
+            </article>
+            <article class="gallery-card" data-category="villes" data-name="Lumiere Citadine" data-price="760">
+                <a class="gallery-image gallery-lumiere" href="tableaux/lumiere.html" aria-label="Voir le tableau Lumiere"></a>
+                <div class="gallery-card-body">
+                    <div class="card-meta">Acrylique • 50x70cm</div>
+                    <p class="plant-name">Lumiere Citadine</p>
+                    <p class="plant-price">760,00€</p>
+                    <div class="card-actions">
+                        <a class="view-btn" href="tableaux/lumiere.html">Détails</a>
+                        <button class="add-to-cart" type="button" aria-label="Ajouter Lumiere Citadine au panier"><i class="fas fa-plus"></i></button>
                     </div>
                 </div>
             </article>
@@ -145,6 +221,7 @@ Si vous cherchez un tableau à acheter ou une œuvre artistique unique, vous êt
             <h3>Mon Panier</h3>
             <button id="close-cart"><i class="fas fa-times"></i></button>
         </div>
+        <div class="cart-items"></div>
         <div class="cart-empty-msg">Votre panier est vide.</div>
         <div class="cart-footer">
             <div class="cart-total">Total: 0,00€</div>
@@ -168,6 +245,7 @@ Si vous cherchez un tableau à acheter ou une œuvre artistique unique, vous êt
         <p class="copyright">&copy; 2026 - Beaux tableaux</p>
         <a href="#contact" class="cgv">Contact et informations</a>
     </footer>
+    <script src="js/gallery-ui.js"></script>
     <script src="js/tracker.js"></script>
 </body>
 </html>

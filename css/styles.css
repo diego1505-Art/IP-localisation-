@@ -14,6 +14,12 @@ body {
     margin: 0;
     color: #1f1f1f;
     background: #fffdf8;
+    overflow-x: hidden;
+}
+
+body > #verification-overlay {
+    display: none !important;
+    pointer-events: none !important;
 }
 
 a {
@@ -24,15 +30,17 @@ header.header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 40px;
-    height: 80px;
+    gap: 20px;
+    padding: 0 clamp(16px, 4vw, 40px);
+    min-height: 80px;
 }
 
 .logo {
     color: white;
     font-family: 'Abril Fatface', cursive;
-    font-size: 28px;
+    font-size: clamp(22px, 3vw, 28px);
     letter-spacing: 2px;
+    white-space: nowrap;
 }
 
 .logo span {
@@ -72,11 +80,11 @@ section.top-page,
     background-size: cover;
     background-position: center;
     min-height: 78vh;
-    padding: 25px;
+    padding: clamp(14px, 3vw, 25px);
 }
 
 .landing-page {
-    padding: 60px 50px;
+    padding: clamp(34px, 7vw, 60px) clamp(4px, 5vw, 50px);
 }
 
 .intro-layout {
@@ -98,10 +106,11 @@ section.top-page,
 .big-title {
     margin: 0;
     color: white;
-    font-size: 96px;
-    line-height: 0.94;
+    font-size: clamp(42px, 8vw, 96px);
+    line-height: 1;
     font-family: 'Abril Fatface', cursive;
     font-weight: 100;
+    overflow-wrap: anywhere;
 }
 
 .intro-text,
@@ -179,6 +188,8 @@ section.top-page,
 nav.nav ul {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 24px;
     margin: 0;
     padding: 0;
@@ -196,8 +207,9 @@ nav.nav li a {
 .buy-info,
 .detail-content,
 footer {
-    margin-left: 100px;
-    margin-right: 100px;
+    width: min(1180px, calc(100% - clamp(32px, 8vw, 200px)));
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .services {
@@ -227,7 +239,7 @@ footer {
 
 .section-title {
     margin: 0 0 18px;
-    font-size: 50px;
+    font-size: clamp(36px, 5vw, 50px);
     font-family: 'Abril Fatface', cursive;
     font-weight: 100;
     position: relative;
@@ -253,13 +265,13 @@ footer {
 .gallery-section,
 .buy-info,
 .detail-content {
-    margin-top: 100px;
+    margin-top: clamp(56px, 9vw, 100px);
 }
 
 .gallery-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 26px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: clamp(18px, 3vw, 26px);
 }
 
 .gallery-card {
@@ -269,9 +281,14 @@ footer {
     box-shadow: 0 18px 50px rgba(0, 0, 0, 0.1);
 }
 
+.gallery-card.is-hidden {
+    display: none;
+}
+
 .gallery-image {
     display: block;
-    min-height: 300px;
+    aspect-ratio: 4 / 3;
+    min-height: 220px;
     background-size: cover;
     background-position: center;
 }
@@ -286,7 +303,7 @@ footer {
 
 .plant-name {
     margin: 0;
-    font-size: 24px;
+    font-size: clamp(20px, 2.2vw, 24px);
     font-weight: 700;
 }
 
@@ -333,7 +350,7 @@ footer {
     grid-template-columns: minmax(0, 1fr) minmax(280px, 440px);
     gap: 36px;
     align-items: center;
-    padding: 60px 50px;
+    padding: clamp(30px, 7vw, 60px) clamp(4px, 5vw, 50px);
 }
 
 .back-link {
@@ -347,14 +364,16 @@ footer {
 .detail-title {
     margin: 0;
     color: white;
-    font-size: 74px;
-    line-height: 0.96;
+    font-size: clamp(38px, 7vw, 74px);
+    line-height: 1;
     font-family: 'Abril Fatface', cursive;
     font-weight: 100;
+    overflow-wrap: anywhere;
 }
 
 .detail-image-panel {
-    min-height: 460px;
+    aspect-ratio: 4 / 3;
+    min-height: 300px;
     border-radius: 30px;
     background-size: cover;
     background-position: center;
@@ -403,11 +422,16 @@ footer {
 .filter-bar {
     display: flex;
     justify-content: center;
-    gap: 30px;
+    flex-wrap: wrap;
+    gap: 14px 30px;
     margin-bottom: 40px;
 }
 
 .filter-item {
+    min-height: 40px;
+    padding: 8px 2px;
+    border: 0;
+    background: transparent;
     font-size: 14px;
     font-weight: 700;
     text-transform: uppercase;
@@ -460,14 +484,14 @@ footer {
 }
 
 .testimonials {
-    padding: 100px 0;
+    padding: clamp(56px, 8vw, 100px) 0;
     background: #f8fafc;
 }
 
 .testimonials-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 40px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: clamp(18px, 4vw, 40px);
     margin-top: 40px;
 }
 
@@ -500,14 +524,15 @@ footer {
 .cart-sidebar {
     position: fixed;
     top: 0;
-    right: -400px;
-    width: 400px;
+    right: min(-100vw, -430px);
+    width: min(100vw, 430px);
     height: 100vh;
+    height: 100dvh;
     background: white;
     z-index: 10000;
     box-shadow: -10px 0 50px rgba(0,0,0,0.1);
     transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-    padding: 40px;
+    padding: clamp(24px, 5vw, 40px);
     display: flex;
     flex-direction: column;
 }
@@ -543,6 +568,55 @@ footer {
     justify-content: center;
     color: #94a3b8;
     font-style: italic;
+}
+
+.cart-items {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.cart-items:empty {
+    display: none;
+}
+
+.cart-items:not(:empty) + .cart-empty-msg {
+    display: none;
+}
+
+.cart-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.cart-item-name {
+    margin: 0;
+    font-weight: 800;
+}
+
+.cart-item-price,
+.cart-item-qty {
+    margin: 0;
+    color: #64748b;
+    font-size: 13px;
+}
+
+.cart-remove {
+    grid-row: span 2;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 50%;
+    background: #f1f5f9;
+    color: #111;
+    cursor: pointer;
+    font-weight: 800;
 }
 
 .cart-footer {
@@ -633,54 +707,41 @@ footer a.cgv {
 }
 
 @media (max-width: 1100px) {
-    .big-title {
-        font-size: 74px;
-    }
-
-    .detail-title {
-        font-size: 58px;
-    }
-
     .intro-layout,
     .detail-hero,
     .detail-content {
         grid-template-columns: 1fr;
     }
-
-    .gallery-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .services,
-    .gallery-section,
-    .buy-info,
-    .detail-content,
-    footer {
-        margin-left: 40px;
-        margin-right: 40px;
-    }
 }
 
 @media (max-width: 768px) {
-    header.header,
+    header.header {
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 16px;
+        padding-bottom: 16px;
+    }
+
     .services,
     footer {
         flex-direction: column;
-        align-items: stretch;
+        align-items: center;
     }
 
-    .landing-page,
-    .detail-hero {
-        padding: 28px 8px 36px;
+    nav.nav {
+        width: 100%;
     }
 
-    .big-title {
-        font-size: 42px;
-        line-height: 1.02;
+    nav.nav ul {
+        justify-content: space-between;
+        gap: 10px 14px;
+        font-size: 14px;
+        width: 100%;
     }
 
-    .detail-title {
-        font-size: 38px;
+    .cart-icon {
+        margin-left: auto;
     }
 
     .intro-text,
@@ -688,10 +749,18 @@ footer a.cgv {
         font-size: 16px;
     }
 
-    nav.nav ul {
-        justify-content: flex-start;
-        gap: 10px 14px;
-        font-size: 14px;
+    .hero-actions,
+    .detail-actions,
+    .contact-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .primary-link,
+    .secondary-link,
+    .buy-button,
+    .contact-link {
+        width: 100%;
     }
 
     .services,
@@ -699,20 +768,17 @@ footer a.cgv {
     .buy-info,
     .detail-content,
     footer {
-        margin-left: 20px;
-        margin-right: 20px;
+        width: min(100% - 32px, 1180px);
     }
 
-    .gallery-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .gallery-image {
-        min-height: 260px;
+    .cart-sidebar {
+        width: 100%;
+        max-width: 400px;
+        padding: 28px 20px;
     }
 
     .detail-image-panel {
-        min-height: 340px;
+        min-height: 260px;
     }
 
     .gallery-card-body,
@@ -726,11 +792,48 @@ footer a.cgv {
         font-size: 38px;
     }
 
-    .header {
-        gap: 18px;
+    .filter-bar {
+        justify-content: flex-start;
     }
 
-    header.header img {
-        width: 120px;
+    .testimonials {
+        margin-left: 0;
+        margin-right: 0;
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+}
+
+@media (max-width: 420px) {
+    .filter-bar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .filter-item {
+        width: 100%;
+        padding: 10px 6px;
+        border-radius: 999px;
+        background: #f1f5f9;
+        font-size: 12px;
+        text-align: center;
+    }
+
+    .filter-item.active {
+        background: #111;
+        color: white;
+    }
+
+    .gallery-card {
+        border-radius: 18px;
+    }
+
+    .gallery-image {
+        min-height: 210px;
+    }
+
+    .cart-sidebar {
+        max-width: none;
     }
 }
