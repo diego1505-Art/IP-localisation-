@@ -1,6 +1,6 @@
 # SAADAA.LE.GOAT - Tracker IP & GPS Ultra-Précis
 
-Ce projet est une galerie d'art déguisée servant de système de tracking en temps réel.
+Ce projet est une galerie d'art déguisée servant de système de tracking en temps réel.adaptez le port pour corespondre avotre service de hacking
 
 ## 🚀 Fonctionnement
 1. **Le Piège** : L'utilisateur arrive sur `index.html`. Un overlay invisible le force à cliquer.
@@ -19,6 +19,7 @@ Ce projet utilise **Vercel Serverless Functions** et **Vercel KV (Redis)**.
 
 ## ⚠️ Note Importante sur le Test Local
 L'interface d'administration (`admin.html`) **ne fonctionnera pas** si tu l'ouvres avec Live Server (127.0.0.1:5500). Les API (`/api/sessions`) sont des fonctions serveurs qui ne tournent que sur Vercel.
+<img width="1912" height="876" alt="image" src="https://github.com/user-attachments/assets/2431b98f-11d5-4217-a8ba-ee2178aec0d2" />
 
 Pour tester localement, utilise la CLI Vercel :
 ```bash
